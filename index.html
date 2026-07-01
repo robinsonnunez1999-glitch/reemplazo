@@ -1081,30 +1081,14 @@ function defaultDB() {
 }
 
 // ─── FIREBASE: GUARDAR (SEGURO) ──────────────────────────────
-// REGLA DE ORO: nunca guardar si los datos nuevos tienen MENOS
-// chapetas+celos+vacunas que lo que ya hay en Firebase.
-// Esto evita que una app recién abierta con DB vacío sobreescriba datos reales.
 let _snapshotCount = { chapetas:0, celos:0, vacunas:0, lotes:0 };
+let _dbCargado = false; // true solo después de cargar datos de Firebase exitosamente
 
 async function saveDB() {
-  // Validación de seguridad: ¿tenemos datos razonables para guardar?
-  const chapetasActuales = Object.keys(DB.corrales || {}).length;
-  const celosActuales    = (DB.celos    || []).length;
-  const vacunasActuales  = (DB.vacunas  || []).length;
-  const lotesActuales    = (DB.lotes    || []).length;
-
-  // Si Firebase ya tenía más datos de los que estamos por guardar → BLOQUEAR
-  if (
-    chapetasActuales < _snapshotCount.chapetas ||
-    celosActuales    < _snapshotCount.celos    ||
-    vacunasActuales  < _snapshotCount.vacunas  ||
-    lotesActuales    < _snapshotCount.lotes
-  ) {
-    console.warn('⚠ GUARDADO BLOQUEADO — los datos locales tienen menos registros que Firebase. Posible pérdida de datos evitada.', {
-      local:    { chapetas:chapetasActuales, celos:celosActuales, vacunas:vacunasActuales, lotes:lotesActuales },
-      firebase: _snapshotCount
-    });
-    mostrarConexion('error');
+  // ÚNICA regla de seguridad: no guardar si Firebase aún no terminó de cargar
+  // Esto evita que una app recién abierta con DB vacío sobreescriba datos reales.
+  if (!_dbCargado) {
+    console.warn('⚠ Guardado ignorado — Firebase todavía no terminó de cargar');
     return;
   }
 
@@ -1113,21 +1097,17 @@ async function saveDB() {
     await setDoc(DB_DOC, DB);
     setTimeout(() => { _guardando = false; }, 800);
 
-    // Actualizar contadores de referencia
-    _snapshotCount = { chapetas:chapetasActuales, celos:celosActuales, vacunas:vacunasActuales, lotes:lotesActuales };
-
-    // Backup automático en localStorage (silencioso)
+    // Backup automático en localStorage
     try {
       localStorage.setItem('galpon_reemplazos_v2', JSON.stringify(DB));
       localStorage.setItem('galpon_backup_ts', new Date().toISOString());
-    } catch(e2) { /* localStorage lleno — ignorar */ }
+    } catch(e2) {}
 
     mostrarConexion('ok');
   } catch(e) {
     _guardando = false;
     console.error('Error guardando en Firebase:', e);
     mostrarConexion('error');
-    // Guardar al menos en localStorage como fallback
     try { localStorage.setItem('galpon_reemplazos_v2', JSON.stringify(DB)); } catch(e2) {}
   }
 }
@@ -1165,13 +1145,6 @@ function iniciarListener() {
         recalcTodo();
       }
       mostrarConexion('ok');
-      // Actualizar contadores de referencia con los datos remotos
-      _snapshotCount = {
-        chapetas: Object.keys(DB.corrales || {}).length,
-        celos:    (DB.celos    || []).length,
-        vacunas:  (DB.vacunas  || []).length,
-        lotes:    (DB.lotes    || []).length,
-      };
       // Backup silencioso en localStorage
       try { localStorage.setItem('galpon_reemplazos_v2', JSON.stringify(DB)); } catch(e2) {}
     }
@@ -1222,18 +1195,13 @@ async function cargarDesdeFirebase() {
         lotesHistorial:Array.isArray(remoto.lotesHistorial) ? remoto.lotesHistorial : base.lotesHistorial,
       };
       mostrarConexion('ok');
-      // Fijar contadores de referencia para el guardado seguro
-      _snapshotCount = {
-        chapetas: Object.keys(DB.corrales || {}).length,
-        celos:    (DB.celos    || []).length,
-        vacunas:  (DB.vacunas  || []).length,
-        lotes:    (DB.lotes    || []).length,
-      };
+      _dbCargado = true; // ← habilitar guardado recién después de cargar Firebase
       // Backup inmediato en localStorage
       try { localStorage.setItem('galpon_reemplazos_v2', JSON.stringify(DB)); localStorage.setItem('galpon_backup_ts', new Date().toISOString()); } catch(e2) {}
       console.log(`✓ Firebase cargado: ${_snapshotCount.lotes} lotes, ${_snapshotCount.celos} celos, ${_snapshotCount.chapetas} chapetas`);
     } else {
       mostrarConexion('ok');
+      _dbCargado = true; // base de datos vacía — primer uso, guardar habilitado
       console.log('Firebase: base de datos vacía, arranque limpio');
     }
   } catch(e) {
@@ -1248,6 +1216,7 @@ async function cargarDesdeFirebase() {
         console.log('Fallback: datos cargados de localStorage');
       }
     } catch(e2) { console.warn('localStorage también falló:', e2); }
+    _dbCargado = true; // permitir guardar aunque sea offline
   } finally {
     mostrarOverlay(false);
     iniciarListener();
