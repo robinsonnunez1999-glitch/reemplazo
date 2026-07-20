@@ -209,6 +209,9 @@ tr:hover td{background:#fafbfc}
 .f-btn{padding:3px 10px;border-radius:10px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:var(--white);color:var(--text2);transition:all 0.12s}
 .f-btn:hover{background:var(--gray)}
 .f-btn.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+.f-btn-proy{padding:3px 10px;border-radius:10px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:var(--white);color:var(--text2);transition:all 0.12s}
+.f-btn-proy:hover{background:var(--gray)}
+.f-btn-proy.active{background:var(--teal);color:#fff;border-color:var(--teal)}
 
 /* ── PARAMS ── */
 .p-sec{margin-bottom:16px}
@@ -328,6 +331,7 @@ tr:hover td{background:#fafbfc}
       <div class="sb-item" data-panel="sanidad"><i class="ti ti-vaccine"></i>Sanidad</div>
       <div class="sb-item" data-panel="fichas"><i class="ti ti-id-badge"></i>Fichas</div>
       <div class="sb-item" data-panel="reportes"><i class="ti ti-download"></i>Reportes</div>
+      <div class="sb-item" data-panel="proyeccion"><i class="ti ti-chart-line"></i>Proyección</div>
       <div class="sb-item" data-panel="historial"><i class="ti ti-archive"></i>Historial</div>
     </div>
     <div class="sb-sec">
@@ -980,6 +984,102 @@ tr:hover td{background:#fafbfc}
       </div>
 
       <!-- ═══════════════════════════════════════
+           PANEL: PROYECCIÓN DE CELOS
+      ═══════════════════════════════════════ -->
+      <div class="panel" id="panel-proyeccion">
+        <div class="sec-hdr" style="margin-bottom:12px">
+          <div class="sec-ttl"><i class="ti ti-chart-line"></i>Proyección de celos futuros</div>
+        </div>
+
+        <!-- Filtro de fechas + selección de celo -->
+        <div class="form-card" style="margin-bottom:12px">
+          <div class="form-body" style="grid-template-columns:1fr 1fr">
+            <div class="field">
+              <label>Fecha inicial *</label>
+              <input type="date" id="proy-desde">
+            </div>
+            <div class="field">
+              <label>Fecha final *</label>
+              <input type="date" id="proy-hasta">
+            </div>
+            <div class="form-full field">
+              <label>N° de celo a proyectar</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+                <button type="button" class="f-btn-proy active" data-numcelo="1">1er celo</button>
+                <button type="button" class="f-btn-proy active" data-numcelo="2">2do celo</button>
+                <button type="button" class="f-btn-proy active" data-numcelo="3">3er celo</button>
+                <button type="button" class="f-btn-proy active" data-numcelo="4">Más de 3 celos</button>
+              </div>
+            </div>
+            <div class="form-full">
+              <div style="background:var(--amber-l);border:0.5px solid #FAC775;border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--amber-d);display:flex;align-items:center;gap:8px">
+                <i class="ti ti-info-circle" style="font-size:15px;flex-shrink:0"></i>
+                <span>La proyección estima la fecha de cada celo futuro sumando <b><span id="proy-intervalo-txt">21</span> días</b> (parámetro configurable) desde el último celo registrado de cada cerda activa. Las cerdas sin ningún celo registrado aún no se pueden proyectar y se muestran aparte, en el KPI "Sin celo base".</span>
+              </div>
+            </div>
+          </div>
+          <div class="form-foot" style="gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="calcularProyeccion()"><i class="ti ti-search"></i>Proyectar</button>
+            <button class="btn btn-secondary" onclick="limpiarProyeccion()"><i class="ti ti-x"></i>Limpiar</button>
+            <button class="btn btn-primary" id="btn-exportar-proy" onclick="exportarProyeccionCSV()" style="display:none;background:#374151"><i class="ti ti-file-spreadsheet"></i>Descargar CSV</button>
+            <span id="proy-msg" style="font-size:12px;color:var(--text3)">Seleccioná un rango de fechas para proyectar.</span>
+          </div>
+        </div>
+
+        <!-- KPIs de la proyección -->
+        <div id="proy-kpis" style="display:none;margin-bottom:12px">
+          <div class="kpi-row" style="grid-template-columns:repeat(4,1fr)">
+            <div class="kpi">
+              <div class="kpi-lbl">Total proyectadas</div>
+              <div class="kpi-val" id="proy-k-total">0</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-lbl">Cerdas únicas</div>
+              <div class="kpi-val" id="proy-k-chaps">0</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-lbl">Activas hoy (inventario)</div>
+              <div class="kpi-val" id="proy-k-activas" style="color:var(--teal)">0</div>
+            </div>
+            <div class="kpi">
+              <div class="kpi-lbl">Sin celo base</div>
+              <div class="kpi-val" id="proy-k-sinbase" style="color:var(--text3)">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de resultados -->
+        <div id="proy-tabla-wrap" style="display:none">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i class="ti ti-table"></i>Cerdas proyectadas <span id="proy-filtro-badge" style="margin-left:6px"></span></div>
+              <div style="font-size:11px;color:var(--text3)">
+                <span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px"><span style="width:10px;height:10px;background:var(--teal-l);border-radius:2px;display:inline-block"></span>1er celo</span>
+                <span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px"><span style="width:10px;height:10px;background:var(--amber-l);border-radius:2px;display:inline-block"></span>2do celo</span>
+                <span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:var(--purple-l);border-radius:2px;display:inline-block"></span>3er celo o más</span>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:12%">Chapeta</th>
+                    <th style="width:10%">Corral</th>
+                    <th style="width:13%">Celo proyectado</th>
+                    <th style="width:15%">Último celo (base)</th>
+                    <th style="width:15%">Fecha proyectada</th>
+                    <th style="width:13%">Faltan</th>
+                    <th style="width:22%">Lote</th>
+                  </tr>
+                </thead>
+                <tbody id="proy-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════
            PANEL: SALIDA
       ═══════════════════════════════════════ -->
       <div class="panel" id="panel-salida">
@@ -1050,12 +1150,12 @@ const DB_KEY = 'galpon_reemplazos_v2';
 const PANEL_TITLES = {
   vision:'Visión general', ingreso:'Ingreso de datos', corrales:'Corrales',
   celos:'Registro de celos', sanidad:'Sanidad', fichas:'Fichas', reportes:'Reportes y exportación',
-  historial:'Historial de cerdas', parametros:'Parámetros del sistema', salida:'Salida'
+  proyeccion:'Proyección de celos', historial:'Historial de cerdas', parametros:'Parámetros del sistema', salida:'Salida'
 };
 const PANEL_ICONS = {
   vision:'ti-layout-dashboard', ingreso:'ti-plus', corrales:'ti-fence',
   celos:'ti-heart', sanidad:'ti-vaccine', fichas:'ti-id-badge', reportes:'ti-download',
-  historial:'ti-archive', parametros:'ti-settings', salida:'ti-logout'
+  proyeccion:'ti-chart-line', historial:'ti-archive', parametros:'ti-settings', salida:'ti-logout'
 };
 
 let DB = defaultDB();
@@ -1245,6 +1345,7 @@ function goPanel(id) {
   if (id === 'sanidad') renderVacTabla();
   if (id === 'salida') renderSalidaTabla();
   if (id === 'historial') renderHistorial();
+  if (id === 'proyeccion') { const el = document.getElementById('proy-intervalo-txt'); if(el) el.textContent = DB.params.interCelo; }
 }
 
 document.querySelectorAll('.sb-item[data-panel]').forEach(btn => {
@@ -2193,6 +2294,159 @@ function exportarCSV() {
   const a    = document.createElement('a');
   a.href     = URL.createObjectURL(blob);
   a.download = `celos_${desde}_${hasta}${sufijo}.csv`;
+  a.click();
+  toast('Archivo CSV descargado');
+}
+
+// ─── PROYECCIÓN DE CELOS ─────────────────────────────────────
+let proyeccionData = [];
+let proyFiltros = new Set(['1','2','3','4']); // '4' = "más de 3 celos"
+
+document.querySelectorAll('.f-btn-proy[data-numcelo]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.classList.toggle('active');
+    const n = btn.dataset.numcelo;
+    if (btn.classList.contains('active')) proyFiltros.add(n);
+    else proyFiltros.delete(n);
+  });
+});
+
+function calcularProyeccion() {
+  const desde = document.getElementById('proy-desde').value;
+  const hasta = document.getElementById('proy-hasta').value;
+
+  if (!desde || !hasta) {
+    document.getElementById('proy-msg').textContent = '⚠ Ingresá fecha inicial y final.';
+    document.getElementById('proy-msg').style.color = 'var(--red)'; return;
+  }
+  if (desde > hasta) {
+    document.getElementById('proy-msg').textContent = '⚠ La fecha inicial no puede ser mayor a la final.';
+    document.getElementById('proy-msg').style.color = 'var(--red)'; return;
+  }
+  if (proyFiltros.size === 0) {
+    document.getElementById('proy-msg').textContent = '⚠ Seleccioná al menos un tipo de celo (1er, 2do, 3er o +3).';
+    document.getElementById('proy-msg').style.color = 'var(--red)'; return;
+  }
+
+  const p     = DB.params;
+  const inter = p.interCelo;
+  const activasHoy = Object.keys(DB.corrales);
+  let resultados = [];
+  let sinBase = 0;
+
+  activasHoy.forEach(ch => {
+    const celosCh = DB.celos.filter(c => c.chapeta === ch)
+      .sort((a,b) => parseLocalDate(b.fecha) - parseLocalDate(a.fecha));
+    if (!celosCh.length) { sinBase++; return; }
+
+    const ultimo         = celosCh[0];
+    const numRegistrados = celosCh.length;
+    const corralInfo      = DB.corrales[ch];
+    const corral           = corralInfo.enEnf ? 'ENF' : corralInfo.corral;
+    const lote             = DB.lotes.find(l => l.chapetas.includes(ch));
+    const loteNombre       = lote ? (lote.nombre || lote.origen) : '—';
+
+    // Proyecta celos futuros hasta que la fecha supere el rango (tope de seguridad: 24 iteraciones)
+    for (let n = 1; n <= 24; n++) {
+      const numProyectado = numRegistrados + n;
+      const fechaProy      = addDays(ultimo.fecha, inter * n);
+      const fechaProyISO   = fmtDateISO(fechaProy);
+      if (fechaProyISO > hasta) break;
+      if (fechaProyISO < desde) continue;
+
+      const catKey = numProyectado >= 4 ? '4' : String(numProyectado);
+      if (!proyFiltros.has(catKey)) continue;
+
+      resultados.push({ chapeta: ch, corral, loteNombre, numProyectado, fechaBase: ultimo.fecha, fechaProy: fechaProyISO });
+    }
+  });
+
+  resultados.sort((a,b) => parseLocalDate(a.fechaProy) - parseLocalDate(b.fechaProy));
+  proyeccionData = resultados;
+
+  const chapsUnicas = [...new Set(resultados.map(r => r.chapeta))];
+  document.getElementById('proy-k-total').textContent    = resultados.length;
+  document.getElementById('proy-k-chaps').textContent    = chapsUnicas.length;
+  document.getElementById('proy-k-activas').textContent  = activasHoy.length;
+  document.getElementById('proy-k-sinbase').textContent  = sinBase;
+  document.getElementById('proy-kpis').style.display     = 'block';
+
+  const labels  = { '1':'1er', '2':'2do', '3':'3er', '4':'+3' };
+  const badge   = document.getElementById('proy-filtro-badge');
+  if (proyFiltros.size < 4) {
+    const activos = ['1','2','3','4'].filter(k => proyFiltros.has(k)).map(k => labels[k]);
+    badge.innerHTML = `<span class="pill pill-b" style="font-size:10px">Filtro: ${activos.join(', ')}</span>`;
+  } else {
+    badge.innerHTML = '';
+  }
+
+  if (!resultados.length) {
+    document.getElementById('proy-tabla-wrap').style.display  = 'none';
+    document.getElementById('btn-exportar-proy').style.display = 'none';
+    document.getElementById('proy-msg').textContent = `Sin cerdas proyectadas en el período ${fmtDate(desde)} — ${fmtDate(hasta)}.`;
+    document.getElementById('proy-msg').style.color = 'var(--text3)';
+    return;
+  }
+
+  const today = TODAY();
+  const tb = document.getElementById('proy-tbody');
+  tb.innerHTML = resultados.map(r => {
+    const nLbl = ['1ro','2do','3ro'][r.numProyectado-1] || r.numProyectado+'to';
+    const pC   = r.numProyectado===1 ? 'pill-g' : r.numProyectado===2 ? 'pill-a' : 'pill-p';
+    const trC  = r.numProyectado>=3 ? 'tr-p' : r.numProyectado===2 ? 'tr-a' : '';
+    const dif  = diffDays(today, parseLocalDate(r.fechaProy));
+    const faltan = dif < 0 ? `Vencido (${Math.abs(dif)}d)` : `${dif} día${dif===1?'':'s'}`;
+    return `<tr class="${trC}">
+      <td><b>${r.chapeta}</b></td>
+      <td>${r.corral}</td>
+      <td><span class="pill ${pC}">${nLbl}</span></td>
+      <td>${fmtDate(r.fechaBase)}</td>
+      <td><span class="pill pill-b">${fmtDate(r.fechaProy)}</span></td>
+      <td>${faltan}</td>
+      <td>${r.loteNombre}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('proy-tabla-wrap').style.display  = 'block';
+  document.getElementById('btn-exportar-proy').style.display = 'flex';
+  document.getElementById('proy-msg').textContent =
+    `${resultados.length} celo${resultados.length===1?'':'s'} proyectado${resultados.length===1?'':'s'} (${chapsUnicas.length} cerda${chapsUnicas.length===1?'':'s'}) entre ${fmtDate(desde)} y ${fmtDate(hasta)}.`;
+  document.getElementById('proy-msg').style.color = 'var(--text3)';
+}
+
+function limpiarProyeccion() {
+  document.getElementById('proy-desde').value = '';
+  document.getElementById('proy-hasta').value = '';
+  document.querySelectorAll('.f-btn-proy').forEach(b => b.classList.add('active'));
+  proyFiltros = new Set(['1','2','3','4']);
+  document.getElementById('proy-filtro-badge').innerHTML   = '';
+  document.getElementById('proy-kpis').style.display       = 'none';
+  document.getElementById('proy-tabla-wrap').style.display = 'none';
+  document.getElementById('btn-exportar-proy').style.display = 'none';
+  document.getElementById('proy-msg').textContent = 'Seleccioná un rango de fechas para proyectar.';
+  document.getElementById('proy-msg').style.color = 'var(--text3)';
+  proyeccionData = [];
+}
+
+function exportarProyeccionCSV() {
+  if (!proyeccionData.length) return;
+  const desde = document.getElementById('proy-desde').value;
+  const hasta = document.getElementById('proy-hasta').value;
+
+  const headers = ['Chapeta','Corral','Celo Proyectado','Último Celo (base)','Fecha Proyectada','Faltan (días)','Lote'];
+  const today = TODAY();
+  const rows = proyeccionData.map(r => {
+    const nLbl = ['1ro','2do','3ro'][r.numProyectado-1] || r.numProyectado+'to';
+    const dif  = diffDays(today, parseLocalDate(r.fechaProy));
+    return [r.chapeta, r.corral, nLbl, fmtDate(r.fechaBase), fmtDate(r.fechaProy), dif, r.loteNombre]
+      .map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+  });
+
+  const csv  = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = `proyeccion_celos_${desde}_${hasta}.csv`;
   a.click();
   toast('Archivo CSV descargado');
 }
