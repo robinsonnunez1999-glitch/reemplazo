@@ -936,7 +936,11 @@ tr:hover td{background:#fafbfc}
           <div class="form-foot" style="gap:10px;flex-wrap:wrap">
             <button class="btn btn-primary" onclick="filtrarReporte()"><i class="ti ti-search"></i>Consultar</button>
             <button class="btn btn-secondary" onclick="limpiarReporte()"><i class="ti ti-x"></i>Limpiar</button>
-            <button class="btn btn-primary" id="btn-exportar" onclick="exportarCSV()" style="display:none;background:#374151"><i class="ti ti-file-spreadsheet"></i>Descargar CSV</button>
+            <div id="btn-exportar" style="display:none;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="exportarCSV()" style="background:#374151"><i class="ti ti-file-spreadsheet"></i>CSV</button>
+              <button class="btn btn-primary" onclick="exportarExcel()" style="background:#1D6F42"><i class="ti ti-file-type-xls"></i>Excel</button>
+              <button class="btn btn-primary" onclick="exportarPDF()" style="background:#B0271A"><i class="ti ti-file-type-pdf"></i>PDF</button>
+            </div>
             <span id="rep-msg" style="font-size:12px;color:var(--text3)">Seleccioná un rango de fechas para ver los celos.</span>
           </div>
         </div>
@@ -1033,7 +1037,11 @@ tr:hover td{background:#fafbfc}
           <div class="form-foot" style="gap:10px;flex-wrap:wrap">
             <button class="btn btn-primary" onclick="calcularProyeccion()"><i class="ti ti-search"></i>Proyectar</button>
             <button class="btn btn-secondary" onclick="limpiarProyeccion()"><i class="ti ti-x"></i>Limpiar</button>
-            <button class="btn btn-primary" id="btn-exportar-proy" onclick="exportarProyeccionCSV()" style="display:none;background:#374151"><i class="ti ti-file-spreadsheet"></i>Descargar CSV</button>
+            <div id="btn-exportar-proy" style="display:none;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="exportarProyeccionCSV()" style="background:#374151"><i class="ti ti-file-spreadsheet"></i>CSV</button>
+              <button class="btn btn-primary" onclick="exportarProyeccionExcel()" style="background:#1D6F42"><i class="ti ti-file-type-xls"></i>Excel</button>
+              <button class="btn btn-primary" onclick="exportarProyeccionPDF()" style="background:#B0271A"><i class="ti ti-file-type-pdf"></i>PDF</button>
+            </div>
             <span id="proy-msg" style="font-size:12px;color:var(--text3)">Seleccioná un rango de fechas para proyectar.</span>
           </div>
         </div>
@@ -1136,6 +1144,13 @@ tr:hover td{background:#fafbfc}
     </main>
   </div>
 </div>
+
+<!-- ══════════════════════════════════════════════════════
+     LIBRERÍAS PARA EXPORTAR (Excel / PDF)
+══════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 
 <!-- ══════════════════════════════════════════════════════
      FIREBASE — SINCRONIZACIÓN EN TIEMPO REAL
@@ -1752,7 +1767,7 @@ function poblarSelectsChapetas() {
       }).join('');
   }
 
-  llenar('celo-ch',  activas, '— Seleccioná una chapeta —');
+  llenar('celo-ch',  todas,   '— Seleccioná una chapeta —');
   llenar('vac-ch',   activas, '— Seleccioná una chapeta —');
   llenar('sal-ch',   todas,   '— Seleccioná una chapeta —');
   llenar('enf-ch',   activas, '— Seleccioná una chapeta —');
@@ -2388,14 +2403,9 @@ function limpiarReporte() {
   paginaState['rep-tbody'] = 1;
 }
 
-function exportarCSV() {
-  if(!reporteData.length) return;
-  const p     = DB.params;
-  const desde = document.getElementById('rep-desde').value;
-  const hasta = document.getElementById('rep-hasta').value;
-  const nFilt = document.getElementById('rep-numcelo').value;
-  const sufijo = nFilt !== 'todos' ? `_celo${nFilt}` : '';
-
+// Arma encabezados y filas (valores crudos, sin escapar) para reutilizar en CSV/Excel/PDF
+function armarFilasReporte() {
+  const p = DB.params;
   const headers = ['Chapeta','N° Celo','Fecha Celo','Próx. Celo Estimado','3er Celo Estimado','Corral','Observaciones'];
   const rows = reporteData.map(c => {
     const d    = parseLocalDate(c.fecha);
@@ -2403,17 +2413,56 @@ function exportarCSV() {
     const celo3 = addDays(d, p.interCelo*2);
     const numLbl = ['1ro','2do','3ro'][c.numCelo-1]||c.numCelo+'to';
     const corral = DB.corrales[c.chapeta] ? (DB.corrales[c.chapeta].enEnf ? 'ENF' : DB.corrales[c.chapeta].corral) : '—';
-    return [c.chapeta, numLbl, fmtDate(c.fecha), fmtDate(prox), fmtDate(celo3), corral, c.obs]
-      .map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',');
+    return [c.chapeta, numLbl, fmtDate(c.fecha), fmtDate(prox), fmtDate(celo3), corral, c.obs];
   });
+  return { headers, rows };
+}
 
-  const csv  = [headers.join(','), ...rows].join('\n');
+function nombreArchivoReporte(ext) {
+  const desde = document.getElementById('rep-desde').value;
+  const hasta = document.getElementById('rep-hasta').value;
+  const nFilt = document.getElementById('rep-numcelo').value;
+  const sufijo = nFilt !== 'todos' ? `_celo${nFilt}` : '';
+  return `celos_${desde}_${hasta}${sufijo}.${ext}`;
+}
+
+function exportarCSV() {
+  if(!reporteData.length) return;
+  const { headers, rows } = armarFilasReporte();
+  const csv  = [headers.join(','), ...rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const a    = document.createElement('a');
   a.href     = URL.createObjectURL(blob);
-  a.download = `celos_${desde}_${hasta}${sufijo}.csv`;
+  a.download = nombreArchivoReporte('csv');
   a.click();
   toast('Archivo CSV descargado');
+}
+
+function exportarExcel() {
+  if(!reporteData.length) return;
+  if(typeof XLSX === 'undefined') { toast('No se pudo cargar el módulo de Excel. Revisá tu conexión.', 'er'); return; }
+  const { headers, rows } = armarFilasReporte();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = headers.map(() => ({ wch: 18 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Reporte celos');
+  XLSX.writeFile(wb, nombreArchivoReporte('xlsx'));
+  toast('Archivo Excel descargado');
+}
+
+function exportarPDF() {
+  if(!reporteData.length) return;
+  if(typeof window.jspdf === 'undefined') { toast('No se pudo cargar el módulo de PDF. Revisá tu conexión.', 'er'); return; }
+  const { headers, rows } = armarFilasReporte();
+  const { jsPDF } = window.jspdf;
+  const docPdf = new jsPDF({ orientation: 'landscape' });
+  docPdf.setFontSize(13);
+  docPdf.text('Reporte de celos — Galpón Reemplazos', 14, 14);
+  docPdf.setFontSize(9);
+  docPdf.text(`Generado: ${fmtDate(today8())}`, 14, 20);
+  docPdf.autoTable({ head: [headers], body: rows, startY: 25, styles: { fontSize: 8 }, headStyles: { fillColor: [29,158,117] } });
+  docPdf.save(nombreArchivoReporte('pdf'));
+  toast('Archivo PDF descargado');
 }
 
 // ─── PROYECCIÓN DE CELOS ─────────────────────────────────────
@@ -2552,27 +2601,60 @@ function limpiarProyeccion() {
   paginaState['proy-tbody'] = 1;
 }
 
-function exportarProyeccionCSV() {
-  if (!proyeccionData.length) return;
-  const desde = document.getElementById('proy-desde').value;
-  const hasta = document.getElementById('proy-hasta').value;
-
+function armarFilasProyeccion() {
   const headers = ['Chapeta','Corral','Celo Proyectado','Último Celo (base)','Fecha Proyectada','Faltan (días)','Lote'];
   const today = TODAY();
   const rows = proyeccionData.map(r => {
     const nLbl = ['1ro','2do','3ro'][r.numProyectado-1] || r.numProyectado+'to';
     const dif  = diffDays(today, parseLocalDate(r.fechaProy));
-    return [r.chapeta, r.corral, nLbl, fmtDate(r.fechaBase), fmtDate(r.fechaProy), dif, r.loteNombre]
-      .map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+    return [r.chapeta, r.corral, nLbl, fmtDate(r.fechaBase), fmtDate(r.fechaProy), dif, r.loteNombre];
   });
+  return { headers, rows };
+}
 
-  const csv  = [headers.join(','), ...rows].join('\n');
+function nombreArchivoProyeccion(ext) {
+  const desde = document.getElementById('proy-desde').value;
+  const hasta = document.getElementById('proy-hasta').value;
+  return `proyeccion_celos_${desde}_${hasta}.${ext}`;
+}
+
+function exportarProyeccionCSV() {
+  if (!proyeccionData.length) return;
+  const { headers, rows } = armarFilasProyeccion();
+  const csv  = [headers.join(','), ...rows.map(r=>r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
   const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
   const a    = document.createElement('a');
   a.href     = URL.createObjectURL(blob);
-  a.download = `proyeccion_celos_${desde}_${hasta}.csv`;
+  a.download = nombreArchivoProyeccion('csv');
   a.click();
   toast('Archivo CSV descargado');
+}
+
+function exportarProyeccionExcel() {
+  if (!proyeccionData.length) return;
+  if(typeof XLSX === 'undefined') { toast('No se pudo cargar el módulo de Excel. Revisá tu conexión.', 'er'); return; }
+  const { headers, rows } = armarFilasProyeccion();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = headers.map(() => ({ wch: 18 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Proyección celos');
+  XLSX.writeFile(wb, nombreArchivoProyeccion('xlsx'));
+  toast('Archivo Excel descargado');
+}
+
+function exportarProyeccionPDF() {
+  if (!proyeccionData.length) return;
+  if(typeof window.jspdf === 'undefined') { toast('No se pudo cargar el módulo de PDF. Revisá tu conexión.', 'er'); return; }
+  const { headers, rows } = armarFilasProyeccion();
+  const { jsPDF } = window.jspdf;
+  const docPdf = new jsPDF({ orientation: 'landscape' });
+  docPdf.setFontSize(13);
+  docPdf.text('Proyección de celos futuros — Galpón Reemplazos', 14, 14);
+  docPdf.setFontSize(9);
+  docPdf.text(`Generado: ${fmtDate(today8())}`, 14, 20);
+  docPdf.autoTable({ head: [headers], body: rows, startY: 25, styles: { fontSize: 8 }, headStyles: { fillColor: [29,158,117] } });
+  docPdf.save(nombreArchivoProyeccion('pdf'));
+  toast('Archivo PDF descargado');
 }
 
 // ─── SANIDAD ─────────────────────────────────────────────────
@@ -3371,9 +3453,13 @@ window.filtrarReporte = filtrarReporte;
 window.irPagina = irPagina;
 window.actualizarNotaCelo = actualizarNotaCelo;
 window.exportarCSV = exportarCSV;
+window.exportarExcel = exportarExcel;
+window.exportarPDF = exportarPDF;
 window.calcularProyeccion = calcularProyeccion;
 window.limpiarProyeccion = limpiarProyeccion;
 window.exportarProyeccionCSV = exportarProyeccionCSV;
+window.exportarProyeccionExcel = exportarProyeccionExcel;
+window.exportarProyeccionPDF = exportarProyeccionPDF;
 window.limpiarReporte = limpiarReporte;
 window.buscarHistorial = buscarHistorial;
 window.limpiarHistorial = limpiarHistorial;
