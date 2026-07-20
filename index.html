@@ -212,6 +212,13 @@ tr:hover td{background:#fafbfc}
 .f-btn-proy{padding:3px 10px;border-radius:10px;border:0.5px solid var(--border);font-size:11px;cursor:pointer;background:var(--white);color:var(--text2);transition:all 0.12s}
 .f-btn-proy:hover{background:var(--gray)}
 .f-btn-proy.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+.pg-wrap{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:10px 14px;border-top:0.5px solid var(--border)}
+.pg-info{font-size:11px;color:var(--text3)}
+.pg-nav{display:flex;align-items:center;gap:4px;overflow-x:auto}
+.pg-btn{min-width:26px;height:26px;padding:0 6px;border-radius:7px;border:0.5px solid var(--border);background:var(--white);color:var(--text2);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s}
+.pg-btn:hover:not(:disabled){background:var(--gray)}
+.pg-btn.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+.pg-btn:disabled{opacity:0.35;cursor:default}
 
 /* ── PARAMS ── */
 .p-sec{margin-bottom:16px}
@@ -573,6 +580,7 @@ tr:hover td{background:#fafbfc}
               <tbody id="celos-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin celos registrados</td></tr></tbody>
             </table>
           </div>
+          <div id="celos-pg" class="pg-wrap"></div>
         </div>
       </div>
 
@@ -655,6 +663,7 @@ tr:hover td{background:#fafbfc}
               <tbody id="vac-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin vacunas registradas</td></tr></tbody>
             </table>
           </div>
+          <div id="vac-pg" class="pg-wrap"></div>
         </div>
       </div>
 
@@ -724,6 +733,7 @@ tr:hover td{background:#fafbfc}
               </tbody>
             </table>
           </div>
+          <div id="hist-lotes-pg" class="pg-wrap"></div>
         </div>
 
         <!-- Todas las salidas -->
@@ -748,6 +758,7 @@ tr:hover td{background:#fafbfc}
               </tbody>
             </table>
           </div>
+          <div id="hist-salidas-pg" class="pg-wrap"></div>
         </div>
       </div>
 
@@ -979,6 +990,7 @@ tr:hover td{background:#fafbfc}
                 <tbody id="rep-tbody"></tbody>
               </table>
             </div>
+            <div id="rep-pg" class="pg-wrap"></div>
           </div>
         </div>
       </div>
@@ -1075,6 +1087,7 @@ tr:hover td{background:#fafbfc}
                 <tbody id="proy-tbody"></tbody>
               </table>
             </div>
+            <div id="proy-pg" class="pg-wrap"></div>
           </div>
         </div>
       </div>
@@ -1116,6 +1129,7 @@ tr:hover td{background:#fafbfc}
               <tbody id="sal-tbody"><tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sin salidas registradas</td></tr></tbody>
             </table>
           </div>
+          <div id="sal-pg" class="pg-wrap"></div>
         </div>
       </div>
 
@@ -1177,7 +1191,21 @@ function defaultDB() {
     enfermeria: [],
     paramsCustom: [],
     lotesHistorial: [],  // lotes cerrados (stock = 0)
+    enfermeriaHistorial: [], // historial completo de ingresos/altas a enfermería (no se borra al dar de alta)
   };
+}
+
+// Backfillea el historial de enfermería para chapetas que ya estaban ingresadas
+// antes de que este registro existiera (evita perder el ingreso "en curso").
+function migrarEnfermeriaHistorial() {
+  if(!Array.isArray(DB.enfermeriaHistorial)) DB.enfermeriaHistorial = [];
+  if(!Array.isArray(DB.enfermeria)) return;
+  DB.enfermeria.forEach(e => {
+    const yaExiste = DB.enfermeriaHistorial.some(h => h.chapeta === e.chapeta && !h.fechaAlta);
+    if(!yaExiste) {
+      DB.enfermeriaHistorial.push({ chapeta:e.chapeta, motivo:e.motivo, fechaIngreso:e.fecha, fechaAlta:null, corralAlta:null });
+    }
+  });
 }
 
 // ─── FIREBASE: GUARDAR (SEGURO) ──────────────────────────────
@@ -1229,7 +1257,9 @@ function iniciarListener() {
         enfermeria:    Array.isArray(remoto.enfermeria)     ? remoto.enfermeria     : base.enfermeria,
         paramsCustom:  Array.isArray(remoto.paramsCustom)   ? remoto.paramsCustom   : base.paramsCustom,
         lotesHistorial:Array.isArray(remoto.lotesHistorial) ? remoto.lotesHistorial : base.lotesHistorial,
+        enfermeriaHistorial: Array.isArray(remoto.enfermeriaHistorial) ? remoto.enfermeriaHistorial : base.enfermeriaHistorial,
       };
+      migrarEnfermeriaHistorial();
       const panelActivo = document.querySelector('.panel.active');
       if (panelActivo) {
         const id = panelActivo.id.replace('panel-','');
@@ -1293,7 +1323,9 @@ async function cargarDesdeFirebase() {
         enfermeria:    Array.isArray(remoto.enfermeria)     ? remoto.enfermeria     : base.enfermeria,
         paramsCustom:  Array.isArray(remoto.paramsCustom)   ? remoto.paramsCustom   : base.paramsCustom,
         lotesHistorial:Array.isArray(remoto.lotesHistorial) ? remoto.lotesHistorial : base.lotesHistorial,
+        enfermeriaHistorial: Array.isArray(remoto.enfermeriaHistorial) ? remoto.enfermeriaHistorial : base.enfermeriaHistorial,
       };
+      migrarEnfermeriaHistorial();
       mostrarConexion('ok');
       _dbCargado = true; // ← habilitar guardado recién después de cargar Firebase
       // Backup inmediato en localStorage
@@ -1313,6 +1345,7 @@ async function cargarDesdeFirebase() {
         const parsed = JSON.parse(local);
         DB = Object.assign(defaultDB(), parsed);
         DB.params = Object.assign(defaultDB().params, parsed.params || {});
+        migrarEnfermeriaHistorial();
         console.log('Fallback: datos cargados de localStorage');
       }
     } catch(e2) { console.warn('localStorage también falló:', e2); }
@@ -1412,6 +1445,71 @@ const fmtDateISO = (d) => {
   return `${y}-${m}-${dd}`;
 };
 const today8 = () => fmtDateISO(TODAY());
+
+// ─── PAGINACIÓN ──────────────────────────────────────────────
+const PG_SIZE = 20;
+const paginaState = {}; // { tbodyId: paginaActual }
+
+// Pinta en `tbodyId` la porción de `data` correspondiente a la página guardada
+// en paginaState, y arma los controles de página en `pgId`. `rowFn` recibe
+// cada item y su índice ORIGINAL dentro de `data` (útil para eliminar/editar).
+function renderPaginado(tbodyId, pgId, data, rowFn, colspan, emptyTxt) {
+  const tb = document.getElementById(tbodyId);
+  const pg = document.getElementById(pgId);
+  if (!tb) return;
+
+  if (!data.length) {
+    tb.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--text3);padding:20px">${emptyTxt || 'Sin registros'}</td></tr>`;
+    if (pg) pg.innerHTML = '';
+    return;
+  }
+
+  const totalPag = Math.max(1, Math.ceil(data.length / PG_SIZE));
+  let pag = paginaState[tbodyId] || 1;
+  if (pag > totalPag) pag = totalPag;
+  if (pag < 1) pag = 1;
+  paginaState[tbodyId] = pag;
+
+  const start = (pag - 1) * PG_SIZE;
+  const slice = data.slice(start, start + PG_SIZE);
+  tb.innerHTML = slice.map((item, i) => rowFn(item, start + i)).join('');
+
+  if (pg) pg.innerHTML = construirPaginador(tbodyId, pgId, pag, totalPag, data.length);
+}
+
+function construirPaginador(tbodyId, pgId, pag, totalPag, totalItems) {
+  const start = (pag - 1) * PG_SIZE + 1;
+  const end   = Math.min(pag * PG_SIZE, totalItems);
+  if (totalPag <= 1) return `<span class="pg-info">${start}–${end} de ${totalItems}</span>`;
+
+  const MAX_BTNS = 5;
+  let ini = Math.max(1, pag - Math.floor(MAX_BTNS / 2));
+  let fin = Math.min(totalPag, ini + MAX_BTNS - 1);
+  ini = Math.max(1, fin - MAX_BTNS + 1);
+
+  let botones = '';
+  if (ini > 1) botones += `<button class="pg-btn" onclick="irPagina('${tbodyId}','${pgId}',1)">1</button>${ini>2?'<span class="pg-info">…</span>':''}`;
+  for (let i = ini; i <= fin; i++) {
+    botones += `<button class="pg-btn ${i===pag?'active':''}" onclick="irPagina('${tbodyId}','${pgId}',${i})">${i}</button>`;
+  }
+  if (fin < totalPag) botones += `${fin<totalPag-1?'<span class="pg-info">…</span>':''}<button class="pg-btn" onclick="irPagina('${tbodyId}','${pgId}',${totalPag})">${totalPag}</button>`;
+
+  return `
+    <span class="pg-info">${start}–${end} de ${totalItems}</span>
+    <div class="pg-nav">
+      <button class="pg-btn" onclick="irPagina('${tbodyId}','${pgId}',${pag-1})" ${pag===1?'disabled':''}><i class="ti ti-chevron-left"></i></button>
+      ${botones}
+      <button class="pg-btn" onclick="irPagina('${tbodyId}','${pgId}',${pag+1})" ${pag===totalPag?'disabled':''}><i class="ti ti-chevron-right"></i></button>
+    </div>`;
+}
+
+// Cada tbody paginado guarda cómo re-pintarse a sí mismo (sin recalcular filtros)
+const paginaRerender = {};
+function irPagina(tbodyId, pgId, n) {
+  paginaState[tbodyId] = n;
+  if (paginaRerender[tbodyId]) paginaRerender[tbodyId]();
+}
+
 
 function toast(msg, type='ok') {
   const el = document.getElementById('toast');
@@ -2045,8 +2143,13 @@ function moverEnf() {
   const mot = document.getElementById('enf-mot').value.trim();
   if(!ch) { setMsg('enf-msg','⚠ Seleccioná una chapeta','er'); return; }
   if(DB.enfermeria.find(e=>e.chapeta===ch)) { setMsg('enf-msg',`La chapeta ${ch} ya está en enfermería`,'er'); return; }
+  if(!Array.isArray(DB.enfermeriaHistorial)) DB.enfermeriaHistorial = [];
   DB.corrales[ch].enEnf = true;
-  DB.enfermeria.push({ chapeta:ch, motivo:mot||'Sin especificar', fecha:today8() });
+  const motivoFinal = mot || 'Sin especificar';
+  const fechaIngreso = today8();
+  DB.enfermeria.push({ chapeta:ch, motivo:motivoFinal, fecha:fechaIngreso });
+  // Registro histórico permanente (no se borra al dar de alta)
+  DB.enfermeriaHistorial.push({ chapeta:ch, motivo:motivoFinal, fechaIngreso, fechaAlta:null, corralAlta:null });
   saveDB();
   document.getElementById('enf-ch').value=''; document.getElementById('enf-mot').value='';
   toast(`Chapeta ${ch} movida a enfermería`);
@@ -2061,6 +2164,14 @@ function darAlta() {
   DB.corrales[ch].enEnf  = false;
   DB.corrales[ch].corral = corral;
   DB.enfermeria = DB.enfermeria.filter(e=>e.chapeta!==ch);
+  // Cerrar el registro histórico abierto más reciente de esa chapeta
+  if(!Array.isArray(DB.enfermeriaHistorial)) DB.enfermeriaHistorial = [];
+  const abiertos = DB.enfermeriaHistorial.filter(e=>e.chapeta===ch && !e.fechaAlta);
+  if(abiertos.length) {
+    const ultimo = abiertos.sort((a,b)=>parseLocalDate(b.fechaIngreso)-parseLocalDate(a.fechaIngreso))[0];
+    ultimo.fechaAlta = today8();
+    ultimo.corralAlta = corral;
+  }
   saveDB();
   document.getElementById('alta-ch').value=''; document.getElementById('alta-corral').value='';
   toast(`Chapeta ${ch} dada de alta en corral ${corral}`);
@@ -2142,10 +2253,10 @@ function eliminarCelo(idx) {
 
 function renderCelosTabla() {
   const p = DB.params;
-  const tb = document.getElementById('celos-tbody');
-  if(!DB.celos.length) { tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin celos registrados</td></tr>'; return; }
+  if(!DB.celos.length) { renderPaginado('celos-tbody','celos-pg',[],null,7,'Sin celos registrados'); return; }
   const sorted = [...DB.celos].map((c,i)=>({...c,_idx:i})).sort((a,b)=>parseLocalDate(b.fecha)-parseLocalDate(a.fecha));
-  tb.innerHTML = sorted.map(c => {
+  paginaRerender['celos-tbody'] = renderCelosTabla;
+  renderPaginado('celos-tbody', 'celos-pg', sorted, (c) => {
     const d = parseLocalDate(c.fecha);
     const prox = addDays(d, p.interCelo);
     const celo3 = addDays(d, p.interCelo*2);
@@ -2159,7 +2270,7 @@ function renderCelosTabla() {
       <td>${c.obs}</td>
       <td><button class="btn btn-danger" style="padding:3px 8px;font-size:10px" onclick="eliminarCelo(${c._idx})" title="Eliminar este celo"><i class="ti ti-trash"></i></button></td>
     </tr>`;
-  }).join('');
+  }, 7, 'Sin celos registrados');
 }
 
 // ─── REPORTES ────────────────────────────────────────────────
@@ -2206,6 +2317,7 @@ function filtrarReporte() {
   reporteData = numFilt === 'todos'
     ? base
     : base.filter(c => c.numCelo === parseInt(numFilt));
+  paginaState['rep-tbody'] = 1; // nuevo filtro → volver a la página 1
 
   // Badge del filtro activo
   const numLbls = { '1':'1er celo', '2':'2do celo', '3':'3er celo', 'todos':'Todos' };
@@ -2226,8 +2338,20 @@ function filtrarReporte() {
     return;
   }
 
-  const tb = document.getElementById('rep-tbody');
-  tb.innerHTML = reporteData.map(c => {
+  renderReporteTabla();
+
+  const filtroTxt = numFilt !== 'todos' ? ` — filtro: ${numLbls[numFilt]}` : '';
+  document.getElementById('rep-tabla-wrap').style.display = 'block';
+  document.getElementById('btn-exportar').style.display   = 'flex';
+  document.getElementById('rep-msg').textContent =
+    `${reporteData.length} celo${reporteData.length===1?'':'s'} encontrado${reporteData.length===1?'':'s'} entre ${fmtDate(desde)} y ${fmtDate(hasta)}${filtroTxt}.`;
+  document.getElementById('rep-msg').style.color = 'var(--text3)';
+}
+
+function renderReporteTabla() {
+  const p = DB.params;
+  paginaRerender['rep-tbody'] = renderReporteTabla;
+  renderPaginado('rep-tbody', 'rep-pg', reporteData, (c) => {
     const d    = parseLocalDate(c.fecha);
     const prox = addDays(d, p.interCelo);
     const c3   = addDays(d, p.interCelo * 2);
@@ -2246,14 +2370,7 @@ function filtrarReporte() {
       <td>${corral}</td>
       <td>${c.obs}</td>
     </tr>`;
-  }).join('');
-
-  const filtroTxt = numFilt !== 'todos' ? ` — filtro: ${numLbls[numFilt]}` : '';
-  document.getElementById('rep-tabla-wrap').style.display = 'block';
-  document.getElementById('btn-exportar').style.display   = 'flex';
-  document.getElementById('rep-msg').textContent =
-    `${reporteData.length} celo${reporteData.length===1?'':'s'} encontrado${reporteData.length===1?'':'s'} entre ${fmtDate(desde)} y ${fmtDate(hasta)}${filtroTxt}.`;
-  document.getElementById('rep-msg').style.color = 'var(--text3)';
+  }, 7, 'Sin celos en este período');
 }
 
 function limpiarReporte() {
@@ -2268,6 +2385,7 @@ function limpiarReporte() {
   document.getElementById('rep-msg').textContent = 'Seleccioná un rango de fechas para ver los celos.';
   document.getElementById('rep-msg').style.color = 'var(--text3)';
   reporteData = [];
+  paginaState['rep-tbody'] = 1;
 }
 
 function exportarCSV() {
@@ -2388,9 +2506,20 @@ function calcularProyeccion() {
     return;
   }
 
+  paginaState['proy-tbody'] = 1; // nueva proyección → volver a la página 1
+  renderProyeccionTabla();
+
+  document.getElementById('proy-tabla-wrap').style.display  = 'block';
+  document.getElementById('btn-exportar-proy').style.display = 'flex';
+  document.getElementById('proy-msg').textContent =
+    `${resultados.length} celo${resultados.length===1?'':'s'} proyectado${resultados.length===1?'':'s'} (${chapsUnicas.length} cerda${chapsUnicas.length===1?'':'s'}) entre ${fmtDate(desde)} y ${fmtDate(hasta)}.`;
+  document.getElementById('proy-msg').style.color = 'var(--text3)';
+}
+
+function renderProyeccionTabla() {
   const today = TODAY();
-  const tb = document.getElementById('proy-tbody');
-  tb.innerHTML = resultados.map(r => {
+  paginaRerender['proy-tbody'] = renderProyeccionTabla;
+  renderPaginado('proy-tbody', 'proy-pg', proyeccionData, (r) => {
     const nLbl = ['1ro','2do','3ro'][r.numProyectado-1] || r.numProyectado+'to';
     const pC   = r.numProyectado===1 ? 'pill-g' : r.numProyectado===2 ? 'pill-a' : 'pill-p';
     const trC  = r.numProyectado>=3 ? 'tr-p' : r.numProyectado===2 ? 'tr-a' : '';
@@ -2405,13 +2534,7 @@ function calcularProyeccion() {
       <td>${faltan}</td>
       <td>${r.loteNombre}</td>
     </tr>`;
-  }).join('');
-
-  document.getElementById('proy-tabla-wrap').style.display  = 'block';
-  document.getElementById('btn-exportar-proy').style.display = 'flex';
-  document.getElementById('proy-msg').textContent =
-    `${resultados.length} celo${resultados.length===1?'':'s'} proyectado${resultados.length===1?'':'s'} (${chapsUnicas.length} cerda${chapsUnicas.length===1?'':'s'}) entre ${fmtDate(desde)} y ${fmtDate(hasta)}.`;
-  document.getElementById('proy-msg').style.color = 'var(--text3)';
+  }, 7, 'Sin cerdas proyectadas en este período');
 }
 
 function limpiarProyeccion() {
@@ -2426,6 +2549,7 @@ function limpiarProyeccion() {
   document.getElementById('proy-msg').textContent = 'Seleccioná un rango de fechas para proyectar.';
   document.getElementById('proy-msg').style.color = 'var(--text3)';
   proyeccionData = [];
+  paginaState['proy-tbody'] = 1;
 }
 
 function exportarProyeccionCSV() {
@@ -2470,18 +2594,18 @@ function guardarVac() {
 }
 
 function renderVacTabla() {
-  const tb = document.getElementById('vac-tbody');
-  if(!DB.vacunas.length) { tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin vacunas registradas</td></tr>'; return; }
-  const sorted = [...DB.vacunas].sort((a,b)=>parseLocalDate(b.fecha)-parseLocalDate(a.fecha));
-  tb.innerHTML = sorted.map((v,i) => `<tr>
+  if(!DB.vacunas.length) { renderPaginado('vac-tbody','vac-pg',[],null,7,'Sin vacunas registradas'); return; }
+  const sorted = [...DB.vacunas].map((v,i)=>({...v,_idx:i})).sort((a,b)=>parseLocalDate(b.fecha)-parseLocalDate(a.fecha));
+  paginaRerender['vac-tbody'] = renderVacTabla;
+  renderPaginado('vac-tbody', 'vac-pg', sorted, (v) => `<tr>
     <td><b>${v.chapeta}</b></td>
     <td>${v.tipo}</td>
     <td>${fmtDate(v.fecha)}</td>
     <td>${v.dosis} ml</td>
     <td>${v.lote}</td>
     <td>${v.resp}</td>
-    <td><button class="btn btn-danger" style="padding:3px 8px;font-size:10px" onclick="eliminarVac(${i})"><i class="ti ti-trash"></i></button></td>
-  </tr>`).join('');
+    <td><button class="btn btn-danger" style="padding:3px 8px;font-size:10px" onclick="eliminarVac(${v._idx})"><i class="ti ti-trash"></i></button></td>
+  </tr>`, 7, 'Sin vacunas registradas');
 }
 
 function eliminarVac(idx) {
@@ -2894,16 +3018,16 @@ function registrarSalida() {
 }
 
 function renderSalidaTabla() {
-  const tb = document.getElementById('sal-tbody');
-  if(!DB.salidas.length) { tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">Sin salidas registradas</td></tr>'; return; }
+  if(!DB.salidas.length) { renderPaginado('sal-tbody','sal-pg',[],null,4,'Sin salidas registradas'); return; }
   const sorted = [...DB.salidas].sort((a,b)=>parseLocalDate(b.fecha)-parseLocalDate(a.fecha));
   const pillMot = {Ppill:'pill-g','Pase a montas':'pill-g','Descarte':'pill-a','Muerte':'pill-r','Venta':'pill-b'};
-  tb.innerHTML = sorted.map(s => `<tr>
+  paginaRerender['sal-tbody'] = renderSalidaTabla;
+  renderPaginado('sal-tbody', 'sal-pg', sorted, (s) => `<tr>
     <td><b>${s.chapeta}</b></td>
     <td>${fmtDate(s.fecha)}</td>
     <td><span class="pill ${pillMot[s.motivo]||'pill-gr'}">${s.motivo}</span></td>
     <td>${s.obs}</td>
-  </tr>`).join('');
+  </tr>`, 4, 'Sin salidas registradas');
 }
 
 // ─── HISTORIAL ───────────────────────────────────────────────
@@ -2912,46 +3036,38 @@ function renderHistorial() {
   if(!Array.isArray(DB.lotesHistorial)) DB.lotesHistorial = [];
 
   // Lotes cerrados
-  const tbL = document.getElementById('hist-lotes-tbody');
   document.getElementById('hist-lotes-cnt').textContent = DB.lotesHistorial.length;
-  if(!DB.lotesHistorial.length) {
-    tbL.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:20px">Sin lotes cerrados aún</td></tr>';
-  } else {
-    const sorted = [...DB.lotesHistorial].sort((a,b) => parseLocalDate(b.fechaCierre)-parseLocalDate(a.fechaCierre));
-    tbL.innerHTML = sorted.map(l => {
-      const salidasLote = DB.salidas.filter(s => s.loteId === l.id);
-      const motivos = [...new Set(salidasLote.map(s=>s.motivo))].join(', ');
-      return `<tr>
-        <td><b>${l.nombre||'—'}</b></td>
-        <td>${l.origen||'—'}</td>
-        <td>${fmtDate(l.fecha)}</td>
-        <td>${fmtDate(l.fechaCierre)}</td>
-        <td>${l.cantidad}</td>
-        <td>${l.corral}</td>
-        <td style="font-size:11px;color:var(--text3)">${motivos||'—'}</td>
-      </tr>`;
-    }).join('');
-  }
+  const sortedLotes = [...DB.lotesHistorial].sort((a,b) => parseLocalDate(b.fechaCierre)-parseLocalDate(a.fechaCierre));
+  paginaRerender['hist-lotes-tbody'] = renderHistorial;
+  renderPaginado('hist-lotes-tbody', 'hist-lotes-pg', sortedLotes, (l) => {
+    const salidasLote = DB.salidas.filter(s => s.loteId === l.id);
+    const motivos = [...new Set(salidasLote.map(s=>s.motivo))].join(', ');
+    return `<tr>
+      <td><b>${l.nombre||'—'}</b></td>
+      <td>${l.origen||'—'}</td>
+      <td>${fmtDate(l.fecha)}</td>
+      <td>${fmtDate(l.fechaCierre)}</td>
+      <td>${l.cantidad}</td>
+      <td>${l.corral}</td>
+      <td style="font-size:11px;color:var(--text3)">${motivos||'—'}</td>
+    </tr>`;
+  }, 7, 'Sin lotes cerrados aún');
 
   // Todas las salidas
-  const tbS = document.getElementById('hist-salidas-tbody');
-  if(!DB.salidas.length) {
-    tbS.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:20px">Sin salidas registradas</td></tr>';
-  } else {
-    const pillMot = {'Pase a montas':'pill-g','Descarte':'pill-a','Muerte':'pill-r','Venta':'pill-b'};
-    const sorted = [...DB.salidas].sort((a,b) => parseLocalDate(b.fecha)-parseLocalDate(a.fecha));
-    tbS.innerHTML = sorted.map(s => {
-      const celosCount = DB.celos.filter(c=>c.chapeta===s.chapeta).length;
-      return `<tr>
-        <td><b>${s.chapeta}</b></td>
-        <td style="font-size:11px">${s.loteNombre||'—'}</td>
-        <td>${fmtDate(s.fecha)}</td>
-        <td><span class="pill ${pillMot[s.motivo]||'pill-gr'}">${s.motivo}</span></td>
-        <td style="text-align:center">${celosCount}</td>
-        <td style="font-size:11px">${s.obs}</td>
-      </tr>`;
-    }).join('');
-  }
+  const pillMot = {'Pase a montas':'pill-g','Descarte':'pill-a','Muerte':'pill-r','Venta':'pill-b'};
+  const sortedSal = [...DB.salidas].sort((a,b) => parseLocalDate(b.fecha)-parseLocalDate(a.fecha));
+  paginaRerender['hist-salidas-tbody'] = renderHistorial;
+  renderPaginado('hist-salidas-tbody', 'hist-salidas-pg', sortedSal, (s) => {
+    const celosCount = DB.celos.filter(c=>c.chapeta===s.chapeta).length;
+    return `<tr>
+      <td><b>${s.chapeta}</b></td>
+      <td style="font-size:11px">${s.loteNombre||'—'}</td>
+      <td>${fmtDate(s.fecha)}</td>
+      <td><span class="pill ${pillMot[s.motivo]||'pill-gr'}">${s.motivo}</span></td>
+      <td style="text-align:center">${celosCount}</td>
+      <td style="font-size:11px">${s.obs}</td>
+    </tr>`;
+  }, 6, 'Sin salidas registradas');
 }
 
 function buscarHistorial() {
@@ -2965,18 +3081,22 @@ function buscarHistorial() {
   const celosCh = DB.celos.filter(c => c.chapeta === q).sort((a,b)=>parseLocalDate(a.fecha)-parseLocalDate(b.fecha));
   // Buscar vacunas
   const vacsCh = DB.vacunas.filter(v => v.chapeta === q).sort((a,b)=>parseLocalDate(a.fecha)-parseLocalDate(b.fecha));
+  // Buscar historial de enfermería (todos los ingresos, cerrados o en curso)
+  if(!Array.isArray(DB.enfermeriaHistorial)) DB.enfermeriaHistorial = [];
+  const enfCh = DB.enfermeriaHistorial.filter(e => e.chapeta === q).sort((a,b)=>parseLocalDate(a.fechaIngreso)-parseLocalDate(b.fechaIngreso));
   // Buscar lote de origen (activo o cerrado)
   const loteActivo   = DB.lotes.find(l => l.chapetas.includes(q));
   const loteCerrado  = DB.lotesHistorial.find(l => l.chapetas.includes(q));
   const lote = loteActivo || loteCerrado;
 
-  if(!salida.length && !celosCh.length && !vacsCh.length && !lote) {
+  if(!salida.length && !celosCh.length && !vacsCh.length && !enfCh.length && !lote) {
     res.innerHTML = `<div class="empty" style="margin-bottom:12px"><i class="ti ti-mood-sad"></i><p>No se encontró información para la chapeta <b>${q}</b></p></div>`;
     return;
   }
 
   const pillMot = {'Pase a montas':'pill-g','Descarte':'pill-a','Muerte':'pill-r','Venta':'pill-b'};
-  const estado = loteActivo ? `<span class="pill pill-g">En inventario</span>` : salida.length ? `<span class="pill pill-a">${salida[0].motivo}</span>` : '<span class="pill pill-gr">Sin datos</span>';
+  const enEnfActual = DB.corrales[q] && DB.corrales[q].enEnf;
+  const estado = enEnfActual ? `<span class="pill pill-a">En enfermería</span>` : loteActivo ? `<span class="pill pill-g">En inventario</span>` : salida.length ? `<span class="pill pill-a">${salida[0].motivo}</span>` : '<span class="pill pill-gr">Sin datos</span>';
 
   res.innerHTML = `<div class="ficha-card" style="margin-bottom:12px">
     <div class="fc-top">
@@ -2990,7 +3110,7 @@ function buscarHistorial() {
         </div>
       </div>
     </div>
-    <div class="fc-body">
+    <div class="fc-body" style="grid-template-columns:1fr 1fr 1fr">
       <div class="fc-col">
         <div class="fc-ct">Celos registrados (${celosCh.length})</div>
         ${celosCh.length ? celosCh.map(c=>{
@@ -3008,6 +3128,15 @@ function buscarHistorial() {
         ${vacsCh.length ? vacsCh.map(v=>`<div class="tli"><div class="tli-dot" style="background:var(--amber)"></div>
           <div><div class="tli-text">${v.tipo}</div><div class="tli-date">${fmtDate(v.fecha)} · ${v.dosis} ml · ${v.resp}</div></div></div>`).join('')
           : '<div style="font-size:12px;color:var(--text3);padding:6px 0">Sin vacunas registradas</div>'}
+      </div>
+      <div class="fc-col">
+        <div class="fc-ct">Visitas a enfermería (${enfCh.length})</div>
+        ${enfCh.length ? enfCh.map(e=>{
+          const enCurso = !e.fechaAlta;
+          return `<div class="tli"><div class="tli-dot" style="background:${enCurso?'var(--red)':'var(--purple)'}"></div>
+            <div><div class="tli-text">${e.motivo}${enCurso?' <span class="pill pill-r" style="font-size:9px">En curso</span>':''}</div>
+            <div class="tli-date">Ingreso: ${fmtDate(e.fechaIngreso)}${e.fechaAlta?` · Alta: ${fmtDate(e.fechaAlta)} (corral ${e.corralAlta})`:''}</div></div></div>`;
+        }).join('') : '<div style="font-size:12px;color:var(--text3);padding:6px 0">Sin visitas a enfermería</div>'}
       </div>
     </div>
   </div>`;
@@ -3030,6 +3159,7 @@ function exportarBackup() {
       vacunas:        DB.vacunas        || [],
       salidas:        DB.salidas        || [],
       enfermeria:     DB.enfermeria     || [],
+      enfermeriaHistorial: DB.enfermeriaHistorial || [],
       paramsCustom:   DB.paramsCustom   || [],
       lotesHistorial: DB.lotesHistorial || [],
       params:         DB.params         || {},
@@ -3074,6 +3204,7 @@ function importarBackup() {
         vacunas:       data.vacunas       || [],
         salidas:       data.salidas       || [],
         enfermeria:    data.enfermeria    || [],
+        enfermeriaHistorial: data.enfermeriaHistorial || [],
         paramsCustom:  data.paramsCustom  || [],
         lotesHistorial:data.lotesHistorial|| [],
       };
@@ -3237,6 +3368,12 @@ window.editarParamCustom = editarParamCustom;
 window.eliminarParamCustom = eliminarParamCustom;
 window.registrarSalida = registrarSalida;
 window.filtrarReporte = filtrarReporte;
+window.irPagina = irPagina;
+window.actualizarNotaCelo = actualizarNotaCelo;
+window.exportarCSV = exportarCSV;
+window.calcularProyeccion = calcularProyeccion;
+window.limpiarProyeccion = limpiarProyeccion;
+window.exportarProyeccionCSV = exportarProyeccionCSV;
 window.limpiarReporte = limpiarReporte;
 window.buscarHistorial = buscarHistorial;
 window.limpiarHistorial = limpiarHistorial;
