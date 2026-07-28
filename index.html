@@ -2019,7 +2019,7 @@ function renderCorrales() {
 
   const corralesCounts = {};
   for(let i=1; i<=nCorral; i++) {
-    const key = `C-0${i}`;
+    const key = `C-${String(i).padStart(2,'0')}`;
     corralesCounts[key] = [];
   }
   Object.entries(DB.corrales).forEach(([ch, info]) => {
