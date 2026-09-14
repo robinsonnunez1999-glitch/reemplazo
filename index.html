@@ -158,9 +158,13 @@ tr:hover td{background:#fafbfc}
 .calc-hl{background:var(--teal-l);border-radius:var(--radius);padding:9px 12px;display:flex;align-items:center;justify-content:space-between;font-size:13px;color:var(--teal-dd)}
 .calc-hl strong{font-size:20px}
 .chap-area{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;min-height:24px}
-.ctag{background:#f4f6f8;border:0.5px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;color:#374151;display:flex;align-items:center;gap:3px}
+.ctag{background:#f4f6f8;border:0.5px solid var(--border);border-radius:5px;padding:3px 6px 3px 8px;font-size:11px;color:#374151;display:flex;align-items:center;gap:4px}
 .ctag button{background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;line-height:1;padding:0}
 .ctag button:hover{color:var(--red)}
+.ctag-sel{border:0.5px solid var(--border);border-radius:4px;background:var(--white);color:var(--teal-dd);font-size:10px;font-weight:500;padding:1px 3px;font-family:inherit;cursor:pointer}
+.ctag-sel:focus{outline:none;border-color:var(--teal)}
+.arete-hint{background:var(--teal-l);border-radius:var(--radius);padding:7px 10px;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--teal-dd);margin-top:6px}
+.arete-hint strong{font-size:14px}
 .form-foot{padding:10px 14px;border-top:0.5px solid #f5f6f8;display:flex;align-items:center;gap:8px}
 .msg-ok{font-size:12px;color:var(--teal);font-weight:500}
 .msg-er{font-size:12px;color:var(--red);font-weight:500}
@@ -474,21 +478,27 @@ tr:hover td{background:#fafbfc}
         <div class="sec-hdr" style="margin-bottom:12px"><div class="sec-ttl"><i class="ti ti-plus"></i>Registrar ingreso de cerdas</div></div>
         <div class="form-card">
           <div class="form-body">
-            <div class="field"><label>Nombre del lote *</label><input type="text" id="ing-nombre" placeholder="Ej: Lote Enero 2025 o LT-01"></div>
+            <div class="field"><label>Lote *</label><input type="text" id="ing-o" placeholder="Ej: 5-1819-26" oninput="actualizarSugerenciaArete()"></div>
+            <div class="field"><label>Nombre del lote</label><input type="text" id="ing-nombre" placeholder="Ej: Lote Enero 2025 (opcional)"></div>
             <div class="field"><label>Fecha de ingreso *</label><input type="date" id="ing-f"></div>
-            <div class="field"><label>Galpón de origen</label><input type="text" id="ing-o" placeholder="Ej: 5-3031-26"></div>
-            <div class="field"><label>Cantidad de cerdas *</label><input type="number" id="ing-c" placeholder="Ej: 5" min="1" oninput="calcProm()"></div>
+            <div class="field"><label>Cantidad de cerdas *</label><input type="number" id="ing-c" placeholder="Ej: 50" min="1" oninput="calcProm()"></div>
             <div class="field"><label>Peso total del lote (kg) *</label><input type="number" id="ing-p" placeholder="Ej: 1345" oninput="calcProm()"></div>
             <div class="form-full"><div class="calc-hl" id="ing-calc" style="display:none"><span>Peso promedio por cerda:</span><strong id="ing-prom">—</strong></div></div>
-            <div class="field"><label>Corral de destino *</label>
+            <div class="field"><label>Corral por defecto *</label>
               <select id="ing-corral">
                 <option value="">Seleccionar corral...</option>
               </select>
+              <div style="font-size:10px;color:var(--text3);margin-top:3px">Se asigna a los aretes generados; podés cambiar el corral de cada uno individualmente abajo.</div>
             </div>
-            <div class="field"><label>Chapetas / aretes (Enter para agregar)</label>
+            <div class="field"><label>Chapetas / aretes (Enter para agregar una manual)</label>
               <div style="display:flex;gap:5px">
-                <input type="text" id="ing-ch" placeholder="Ej: 3042" onkeydown="if(event.key==='Enter'){event.preventDefault();addChap()}" style="flex:1">
-                <button class="btn btn-secondary" style="padding:6px 10px" onclick="addChap()"><i class="ti ti-plus"></i></button>
+                <input type="text" id="ing-ch" placeholder="Sugerido: —" onkeydown="if(event.key==='Enter'){event.preventDefault();addChap()}" style="flex:1">
+                <button class="btn btn-secondary" style="padding:6px 10px" onclick="addChap()" title="Agregar esta chapeta"><i class="ti ti-plus"></i></button>
+                <button class="btn btn-primary" style="padding:6px 10px" onclick="generarAretesAuto()" title="Generar automáticamente los aretes que falten según la cantidad"><i class="ti ti-wand"></i>Generar</button>
+              </div>
+              <div class="arete-hint">
+                <span>Próximo número de arete disponible:</span>
+                <strong id="ing-siguiente-arete">—</strong>
               </div>
               <div class="chap-area" id="chap-area"></div>
             </div>
@@ -510,6 +520,27 @@ tr:hover td{background:#fafbfc}
           <span style="font-size:11px;color:var(--text3)">Capacidad máx. configurada en Parámetros</span>
         </div>
         <div class="card"><div class="corrales-grid" id="corrales-grid"></div></div>
+        <div class="sec-hdr" style="margin-bottom:10px">
+          <div class="sec-ttl" style="color:var(--teal)"><i class="ti ti-arrows-right-left" style="color:var(--teal)"></i>Mover cerda entre corrales</div>
+        </div>
+        <div class="form-card">
+          <div class="form-body">
+            <div class="field"><label>Seleccioná la chapeta *</label>
+              <select id="mov-ch">
+                <option value="">— Seleccioná una chapeta —</option>
+              </select>
+            </div>
+            <div class="field"><label>Corral de destino *</label>
+              <select id="mov-corral">
+                <option value="">Seleccionar corral...</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-foot">
+            <button class="btn btn-primary" onclick="moverCorral()"><i class="ti ti-arrows-right-left"></i>Mover</button>
+            <span id="mov-msg"></span>
+          </div>
+        </div>
         <div class="sec-hdr" style="margin-bottom:10px">
           <div class="sec-ttl" style="color:#BA7517"><i class="ti ti-first-aid-kit" style="color:#BA7517"></i>Mover cerda a enfermería</div>
         </div>
@@ -1207,6 +1238,7 @@ function defaultDB() {
     paramsCustom: [],
     lotesHistorial: [],  // lotes cerrados (stock = 0)
     enfermeriaHistorial: [], // historial completo de ingresos/altas a enfermería (no se borra al dar de alta)
+    movimientosCorral: [], // historial de movimientos entre corrales (no enfermería)
   };
 }
 
@@ -1772,6 +1804,7 @@ function poblarSelectsChapetas() {
   llenar('sal-ch',   todas,   '— Seleccioná una chapeta —');
   llenar('enf-ch',   activas, '— Seleccioná una chapeta —');
   llenar('alta-ch',  enEnf,   '— Chapetas en enfermería —');
+  llenar('mov-ch',   activas, '— Seleccioná una chapeta —');
 }
 
 // ─── POBLAR SELECT DE VACUNAS (desde parámetros) ─────────────
@@ -1855,12 +1888,17 @@ function guardarVacLote() {
   renderVacTabla(); recalcTodo();
   setMsg('vac-msg-lote', `✓ Aplicada a ${chapetasActivas.length} aretes`);
 }
-function poblarSelectsCorrales() {
+function getCorralOptions() {
   const n = DB.params.nCorrales || 5;
   const opciones = [];
   for(let i = 1; i <= n; i++) {
     opciones.push(`C-${String(i).padStart(2,'0')}`);
   }
+  return opciones;
+}
+
+function poblarSelectsCorrales() {
+  const opciones = getCorralOptions();
 
   function llenar(id) {
     const el = document.getElementById(id);
@@ -1872,6 +1910,7 @@ function poblarSelectsCorrales() {
 
   llenar('ing-corral');
   llenar('alta-corral');
+  llenar('mov-corral');
 }
 
 // ─── ELIMINAR LOTE ───────────────────────────────────────────
@@ -1961,16 +2000,87 @@ function calcProm() {
   else box.style.display='none';
 }
 
+// Recorre todo el historial (lotes activos, lotes cerrados y salidas) para
+// encontrar el número de arete más alto que se haya usado alguna vez,
+// y así sugerir siempre el siguiente número disponible, sin repetir.
+function obtenerUltimoNumeroArete() {
+  let max = 0;
+  let digitos = 4; // ancho mínimo para el padding (ej: 3042)
+  const revisar = (ch) => {
+    if(!ch) return;
+    const soloDigitos = String(ch).replace(/\D/g,'');
+    if(!soloDigitos) return;
+    const n = parseInt(soloDigitos, 10);
+    if(!isNaN(n) && n > max) max = n;
+    if(soloDigitos.length > digitos) digitos = soloDigitos.length;
+  };
+  (DB.lotes||[]).forEach(l => (l.chapetas||[]).forEach(revisar));
+  (DB.lotesHistorial||[]).forEach(l => (l.chapetas||[]).forEach(revisar));
+  (DB.salidas||[]).forEach(s => revisar(s.chapeta));
+  chapsTmp.forEach(t => revisar(t.ch));
+  return { max, digitos };
+}
+
+function siguienteNumeroArete() {
+  const { max, digitos } = obtenerUltimoNumeroArete();
+  return String(max + 1).padStart(digitos, '0');
+}
+
+function actualizarSugerenciaArete() {
+  const el = document.getElementById('ing-siguiente-arete');
+  const inp = document.getElementById('ing-ch');
+  if(!el) return;
+  const sugerido = siguienteNumeroArete();
+  el.textContent = sugerido;
+  if(inp) inp.placeholder = `Sugerido: ${sugerido}`;
+}
+
 function addChap() {
   const inp = document.getElementById('ing-ch');
-  const v = inp.value.trim().toUpperCase();
-  if(!v || chapsTmp.includes(v)) { inp.value=''; return; }
-  chapsTmp.push(v); renderChaps(); inp.value=''; inp.focus();
+  const corralDefault = document.getElementById('ing-corral').value;
+  let v = inp.value.trim().toUpperCase();
+  if(!v) v = siguienteNumeroArete(); // si lo deja vacío, usa el sugerido
+  if(chapsTmp.some(t => t.ch === v)) { inp.value=''; return; }
+  chapsTmp.push({ ch: v, corral: corralDefault });
+  renderChaps(); actualizarSugerenciaArete();
+  inp.value=''; inp.focus();
+}
+
+// Genera automáticamente los aretes que falten para completar la
+// "Cantidad de cerdas" indicada, tomando números consecutivos a partir
+// del siguiente disponible. Cada uno queda con el corral por defecto,
+// pero se puede cambiar individualmente en la lista.
+function generarAretesAuto() {
+  const c = parseInt(document.getElementById('ing-c').value)||0;
+  const corralDefault = document.getElementById('ing-corral').value;
+  if(!c) { setMsg('ing-msg','⚠ Indicá primero la cantidad de cerdas','er'); return; }
+  if(!corralDefault) { setMsg('ing-msg','⚠ Seleccioná un corral por defecto antes de generar','er'); return; }
+  const faltan = c - chapsTmp.length;
+  if(faltan <= 0) { setMsg('ing-msg','ℹ Ya tenés cargados todos los aretes de esta cantidad','ok'); return; }
+
+  for(let i=0; i<faltan; i++) {
+    const { max, digitos } = obtenerUltimoNumeroArete();
+    chapsTmp.push({ ch: String(max+1).padStart(digitos,'0'), corral: corralDefault });
+  }
+  renderChaps(); actualizarSugerenciaArete();
+  setMsg('ing-msg', `✓ Se generaron ${faltan} aretes automáticamente`, 'ok');
+}
+
+function cambiarCorralChap(i, val) {
+  if(chapsTmp[i]) chapsTmp[i].corral = val;
 }
 
 function renderChaps() {
-  document.getElementById('chap-area').innerHTML = chapsTmp.map((c,i) =>
-    `<div class="ctag"><i class="ti ti-tag" style="font-size:11px"></i>${c}<button onclick="chapsTmp.splice(${i},1);renderChaps()" title="Quitar">×</button></div>`).join('');
+  const opciones = getCorralOptions();
+  document.getElementById('chap-area').innerHTML = chapsTmp.map((t,i) => `
+    <div class="ctag">
+      <i class="ti ti-tag" style="font-size:11px"></i>${t.ch}
+      <select class="ctag-sel" onchange="cambiarCorralChap(${i}, this.value)" title="Corral de esta cerda">
+        <option value="">Sin corral</option>
+        ${opciones.map(o => `<option value="${o}" ${o===t.corral?'selected':''}>${o}</option>`).join('')}
+      </select>
+      <button onclick="chapsTmp.splice(${i},1);renderChaps();actualizarSugerenciaArete()" title="Quitar">×</button>
+    </div>`).join('');
 }
 
 function guardarIngreso() {
@@ -1979,27 +2089,54 @@ function guardarIngreso() {
   const o = document.getElementById('ing-o').value.trim();
   const c = parseInt(document.getElementById('ing-c').value)||0;
   const p = parseFloat(document.getElementById('ing-p').value)||0;
-  const corral = document.getElementById('ing-corral').value;
-  if(!nombre) { setMsg('ing-msg','⚠ Ingresá un nombre para el lote','er'); return; }
-  if(!f||!c||!p||!corral) { setMsg('ing-msg','⚠ Completá todos los campos obligatorios (*)','er'); return; }
+  const corralDefault = document.getElementById('ing-corral').value;
+  if(!o) { setMsg('ing-msg','⚠ Ingresá el código de lote','er'); return; }
+  if(!f||!c||!p||!corralDefault) { setMsg('ing-msg','⚠ Completá todos los campos obligatorios (*)','er'); return; }
   if(c < chapsTmp.length) { setMsg('ing-msg',`⚠ Cargaste ${chapsTmp.length} chapetas pero indicaste ${c} animales`,'er'); return; }
+  if(chapsTmp.some(t => !t.corral)) { setMsg('ing-msg','⚠ Hay aretes sin corral asignado','er'); return; }
 
-  const lote = {
-    id: Date.now(),
-    nombre,              // nombre personalizado
-    origen: o || '—',
-    fecha: f,
-    cantidad: c,
-    cantidadActual: c,   // se va descontando con cada salida
-    pesoTotal: p,
-    corral,
-    chapetas: chapsTmp.slice()
-  };
-  DB.lotes.push(lote);
-  chapsTmp.forEach(ch => { DB.corrales[ch] = { corral, enEnf:false, loteId: lote.id }; });
+  // Si faltan aretes por cargar respecto a la cantidad, se completan
+  // automáticamente con el siguiente número disponible y el corral por defecto.
+  while(chapsTmp.length < c) {
+    const { max, digitos } = obtenerUltimoNumeroArete();
+    chapsTmp.push({ ch: String(max+1).padStart(digitos,'0'), corral: corralDefault });
+  }
 
-  saveDB(); chapsTmp = []; renderChaps(); limpiarIngreso(true);
-  toast(`Lote "${nombre}" registrado — ${c} animal${c===1?'':'es'} en ${corral}`);
+  const chapetas = chapsTmp.map(t => t.ch);
+  const corralesUsados = [...new Set(chapsTmp.map(t => t.corral))];
+  const corralEtiqueta = corralesUsados.length === 1 ? corralesUsados[0] : `Varios (${corralesUsados.join(', ')})`;
+
+  // Reconoce automáticamente el lote: si ya existe un lote ACTIVO con este
+  // mismo código, suma los animales nuevos ahí en vez de crear uno duplicado.
+  const loteExistente = DB.lotes.find(l => l.origen === o);
+
+  if(loteExistente) {
+    loteExistente.cantidad += c;
+    loteExistente.cantidadActual = (loteExistente.cantidadActual ?? loteExistente.cantidad - c) + c;
+    loteExistente.pesoTotal += p;
+    loteExistente.chapetas = [...(loteExistente.chapetas||[]), ...chapetas];
+    const corralesLote = [...new Set([...( (loteExistente.corral||'').replace('Varios (','').replace(')','').split(', ').filter(Boolean) ), ...corralesUsados])];
+    loteExistente.corral = corralesLote.length === 1 ? corralesLote[0] : `Varios (${corralesLote.join(', ')})`;
+    chapsTmp.forEach(t => { DB.corrales[t.ch] = { corral: t.corral, enEnf:false, loteId: loteExistente.id }; });
+    saveDB(); chapsTmp = []; renderChaps(); limpiarIngreso(true);
+    toast(`Lote "${loteExistente.nombre||o}" actualizado — se sumaron ${c} animal${c===1?'':'es'} (total ${loteExistente.cantidad})`);
+  } else {
+    const lote = {
+      id: Date.now(),
+      nombre: nombre || o,
+      origen: o,
+      fecha: f,
+      cantidad: c,
+      cantidadActual: c,   // se va descontando con cada salida
+      pesoTotal: p,
+      corral: corralEtiqueta,
+      chapetas
+    };
+    DB.lotes.push(lote);
+    chapsTmp.forEach(t => { DB.corrales[t.ch] = { corral: t.corral, enEnf:false, loteId: lote.id }; });
+    saveDB(); chapsTmp = []; renderChaps(); limpiarIngreso(true);
+    toast(`Lote "${lote.nombre}" registrado — ${c} animal${c===1?'':'es'}`);
+  }
   recalcTodo();
 }
 
@@ -2008,6 +2145,7 @@ function limpiarIngreso(keep) {
   document.getElementById('ing-corral').value='';
   document.getElementById('ing-calc').style.display='none';
   if(!keep) { chapsTmp=[]; renderChaps(); document.getElementById('ing-msg').textContent=''; }
+  actualizarSugerenciaArete();
 }
 
 // ─── CORRALES ────────────────────────────────────────────────
@@ -2022,11 +2160,18 @@ function renderCorrales() {
     const key = `C-${String(i).padStart(2,'0')}`;
     corralesCounts[key] = [];
   }
+  // Además de los corrales configurados (1..nCorral), incluimos cualquier
+  // otro corral que ya tenga animales asignados (ej. si nCorrales bajó
+  // después de haber usado corrales más altos) para que ninguna chapeta
+  // quede oculta del mapa por no encajar en el rango configurado.
+  Object.values(DB.corrales).forEach(info => {
+    if(!info.enEnf && info.corral && !corralesCounts[info.corral]) corralesCounts[info.corral] = [];
+  });
   Object.entries(DB.corrales).forEach(([ch, info]) => {
-    if(!info.enEnf && corralesCounts[info.corral]) corralesCounts[info.corral].push(ch);
+    if(!info.enEnf && info.corral && corralesCounts[info.corral]) corralesCounts[info.corral].push(ch);
   });
 
-  let html = Object.entries(corralesCounts).map(([n, chaps]) => {
+  let html = Object.entries(corralesCounts).sort(([a],[b]) => a.localeCompare(b, undefined, {numeric:true})).map(([n, chaps]) => {
     const pct = Math.round((chaps.length/max)*100);
     const color = pct>=90?'var(--red)':pct>=70?'var(--amber)':'var(--teal)';
     return `<div class="cb" style="cursor:pointer" onclick="abrirModalCorral('${n}')" title="Ver detalle de ${n}">
@@ -2151,6 +2296,26 @@ function precargarFicha(ch) {
   goPanel('fichas');
   document.getElementById('ficha-q').value = ch;
   buscarFicha();
+}
+
+function moverCorral() {
+  const ch     = document.getElementById('mov-ch').value;
+  const corral = document.getElementById('mov-corral').value;
+  if(!ch)     { setMsg('mov-msg','⚠ Seleccioná una chapeta','er'); return; }
+  if(!corral) { setMsg('mov-msg','⚠ Seleccioná un corral de destino','er'); return; }
+  if(!DB.corrales[ch]) { setMsg('mov-msg','⚠ Esa chapeta no está activa en el sistema','er'); return; }
+  if(DB.corrales[ch].enEnf) { setMsg('mov-msg','⚠ Esa chapeta está en enfermería — usá "Volver al corral" para reubicarla','er'); return; }
+  const corralOrigen = DB.corrales[ch].corral;
+  if(corralOrigen === corral) { setMsg('mov-msg',`ℹ La chapeta ${ch} ya está en ${corral}`,'ok'); return; }
+
+  DB.corrales[ch].corral = corral;
+  if(!Array.isArray(DB.movimientosCorral)) DB.movimientosCorral = [];
+  DB.movimientosCorral.push({ chapeta:ch, corralOrigen, corralDestino:corral, fecha:today8(), ts:Date.now() });
+
+  saveDB();
+  document.getElementById('mov-ch').value=''; document.getElementById('mov-corral').value='';
+  toast(`Chapeta ${ch} movida de ${corralOrigen} a ${corral}`);
+  renderCorrales(); recalcTodo();
 }
 
 function moverEnf() {
@@ -3436,6 +3601,7 @@ window.guardarIngreso = guardarIngreso;
 window.limpiarIngreso = limpiarIngreso;
 window.eliminarLote = eliminarLote;
 window.moverEnf = moverEnf;
+window.moverCorral = moverCorral;
 window.darAlta = darAlta;
 window.previewCelo = previewCelo;
 window.guardarCelo = guardarCelo;
@@ -3475,6 +3641,9 @@ window.poblarSelectVacunas = poblarSelectVacunas;
 window.toggleModoVac = toggleModoVac;
 window.mostrarAretes = mostrarAretes;
 window.guardarVacLote = guardarVacLote;
+window.generarAretesAuto = generarAretesAuto;
+window.actualizarSugerenciaArete = actualizarSugerenciaArete;
+window.cambiarCorralChap = cambiarCorralChap;
 
 // ─── INIT ─────────────────────────────────────────────────────
 (async function init() {
@@ -3503,6 +3672,7 @@ window.guardarVacLote = guardarVacLote;
   cargarParams();
   renderParamsCustom();
   recalcTodo();
+  actualizarSugerenciaArete();
 })();
 
 </script>
