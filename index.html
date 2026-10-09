@@ -632,6 +632,10 @@ tr:hover td{background:#fafbfc}
               class="btn btn-secondary" style="padding:5px 14px;font-size:12px">
               <i class="ti ti-layout-cards"></i>Lote completo
             </button>
+            <button id="vac-btn-corral" onclick="toggleModoVac('corral')"
+              class="btn btn-secondary" style="padding:5px 14px;font-size:12px">
+              <i class="ti ti-fence"></i>Corral completo
+            </button>
           </div>
 
           <!-- MODO ARETE -->
@@ -683,6 +687,37 @@ tr:hover td{background:#fafbfc}
             <div class="form-foot">
               <button class="btn btn-primary" onclick="guardarVacLote()"><i class="ti ti-check"></i>Registrar para todo el lote</button>
               <span id="vac-msg-lote"></span>
+            </div>
+          </div>
+
+          <!-- MODO CORRAL -->
+          <div id="vac-modo-corral" style="display:none">
+            <div class="form-body">
+              <div class="field"><label>Seleccioná el corral *</label>
+                <select id="vac-corral-id" onchange="vacExcluidas.clear();mostrarAretesCorral()">
+                  <option value="">— Seleccioná un corral —</option>
+                </select>
+              </div>
+              <div class="field"><label>Vacuna *</label>
+                <select id="vac-tipo-corral"><!-- Poblado desde Parámetros --></select>
+              </div>
+              <div class="field"><label>Fecha de aplicación *</label><input type="date" id="vac-f-corral"></div>
+              <div class="field"><label>Dosis por animal (ml)</label><input type="number" id="vac-dos-corral" placeholder="Ej: 2" min="0" step="0.5"></div>
+              <div class="field"><label>Lote del producto</label><input type="text" id="vac-lote-prod-corral" placeholder="Opcional"></div>
+              <div class="field"><label>Responsable</label><input type="text" id="vac-resp-corral" placeholder="Nombre operario"></div>
+              <div class="form-full" id="vac-corral-preview" style="display:none">
+                <div style="background:var(--teal-l);border-radius:var(--radius);padding:10px 12px;font-size:12px;color:var(--teal-dd)">
+                  <div style="font-weight:500;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+                    <i class="ti ti-info-circle"></i><span id="vac-corral-resumen">Cerdas del corral</span>
+                  </div>
+                  <div id="vac-corral-lista" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+                  <div style="font-size:10px;margin-top:6px;opacity:.8">Tocá un arete para excluirlo de esta aplicación (queda tachado).</div>
+                </div>
+              </div>
+            </div>
+            <div class="form-foot">
+              <button class="btn btn-primary" onclick="guardarVacCorral()"><i class="ti ti-check"></i>Registrar para todo el corral</button>
+              <span id="vac-msg-corral"></span>
             </div>
           </div>
         </div>
@@ -1800,7 +1835,7 @@ function poblarSelectsChapetas() {
   }
 
   llenar('celo-ch',  todas,   '— Seleccioná una chapeta —');
-  llenar('vac-ch',   activas, '— Seleccioná una chapeta —');
+  llenar('vac-ch',   todas,   '— Seleccioná una chapeta —');
   llenar('sal-ch',   todas,   '— Seleccioná una chapeta —');
   llenar('enf-ch',   activas, '— Seleccioná una chapeta —');
   llenar('alta-ch',  enEnf,   '— Chapetas en enfermería —');
@@ -1814,13 +1849,26 @@ function poblarSelectVacunas() {
     .filter(v => v && v.trim() !== '');
   opciones.push('Otra');
   const html = opciones.map(v => `<option value="${v}">${v}</option>`).join('');
-  ['vac-tipo','vac-tipo-lote'].forEach(id => {
+  ['vac-tipo','vac-tipo-lote','vac-tipo-corral'].forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
     const prev = el.value;
     el.innerHTML = html;
     if(prev) el.value = prev;
   });
+  // Poblar select de corrales (solo los que tienen cerdas activas, fuera de enfermería)
+  const elCorral = document.getElementById('vac-corral-id');
+  if(elCorral) {
+    const prevC = elCorral.value;
+    const conteo = {};
+    Object.values(DB.corrales).forEach(info => {
+      if(!info.enEnf && info.corral) conteo[info.corral] = (conteo[info.corral]||0) + 1;
+    });
+    elCorral.innerHTML = '<option value="">— Seleccioná un corral —</option>' +
+      Object.keys(conteo).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})).map(c =>
+        `<option value="${c}" ${c===prevC?'selected':''}>${c} — ${conteo[c]} cerda${conteo[c]===1?'':'s'}</option>`
+      ).join('');
+  }
   // Poblar select de lotes en sanidad
   const elLote = document.getElementById('vac-lote-id');
   if(elLote) {
@@ -1834,13 +1882,13 @@ function poblarSelectVacunas() {
 
 // ─── SANIDAD: TOGGLE MODO ────────────────────────────────────
 function toggleModoVac(modo) {
-  const esArete = modo === 'arete';
-  document.getElementById('vac-modo-arete').style.display = esArete ? 'block' : 'none';
-  document.getElementById('vac-modo-lote').style.display  = esArete ? 'none'  : 'block';
-  document.getElementById('vac-btn-arete').className = esArete ? 'btn btn-primary' : 'btn btn-secondary';
-  document.getElementById('vac-btn-lote').className  = esArete ? 'btn btn-secondary' : 'btn btn-primary';
-  document.getElementById('vac-btn-arete').style.cssText = 'padding:5px 14px;font-size:12px';
-  document.getElementById('vac-btn-lote').style.cssText  = 'padding:5px 14px;font-size:12px';
+  ['arete','lote','corral'].forEach(m => {
+    const panel = document.getElementById('vac-modo-'+m);
+    const btn   = document.getElementById('vac-btn-'+m);
+    if(panel) panel.style.display = (m===modo) ? 'block' : 'none';
+    if(btn) { btn.className = (m===modo) ? 'btn btn-primary' : 'btn btn-secondary'; btn.style.cssText = 'padding:5px 14px;font-size:12px'; }
+  });
+  if(modo==='corral') mostrarAretesCorral();
 }
 
 function mostrarAretes() {
@@ -1887,6 +1935,69 @@ function guardarVacLote() {
   toast(`Vacuna ${tipo} registrada para ${chapetasActivas.length} aretes del lote ${lote.origen}`);
   renderVacTabla(); recalcTodo();
   setMsg('vac-msg-lote', `✓ Aplicada a ${chapetasActivas.length} aretes`);
+}
+
+// ─── SANIDAD: POR CORRAL COMPLETO ────────────────────────────
+const vacExcluidas = new Set(); // aretes que el usuario excluye de esta aplicación
+
+function chapetasDeCorral(corralId) {
+  return Object.entries(DB.corrales)
+    .filter(([ch, info]) => !info.enEnf && info.corral === corralId)
+    .map(([ch]) => ch)
+    .sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
+}
+
+function mostrarAretesCorral() {
+  const corralId = document.getElementById('vac-corral-id').value;
+  const preview = document.getElementById('vac-corral-preview');
+  const lista   = document.getElementById('vac-corral-lista');
+  if(!corralId) { preview.style.display='none'; return; }
+  const chaps = chapetasDeCorral(corralId);
+  const incl = chaps.filter(ch => !vacExcluidas.has(ch)).length;
+  document.getElementById('vac-corral-resumen').textContent =
+    `${corralId}: se vacunarán ${incl} de ${chaps.length} cerdas`;
+  lista.innerHTML = chaps.map(ch => {
+    const ex = vacExcluidas.has(ch);
+    return `<span class="pill ${ex?'pill-gr':'pill-g'}" style="cursor:pointer;${ex?'text-decoration:line-through;opacity:.6':''}" onclick="toggleExcluirVac('${ch}')">${ch}</span>`;
+  }).join('') || '<span style="color:var(--text3)">Sin cerdas en este corral</span>';
+  preview.style.display = 'block';
+}
+
+function toggleExcluirVac(ch) {
+  if(vacExcluidas.has(ch)) vacExcluidas.delete(ch); else vacExcluidas.add(ch);
+  mostrarAretesCorral();
+}
+
+function guardarVacCorral() {
+  const corralId = document.getElementById('vac-corral-id').value;
+  const tipo  = document.getElementById('vac-tipo-corral').value;
+  const f     = document.getElementById('vac-f-corral').value;
+  const dos   = document.getElementById('vac-dos-corral').value;
+  const loteP = document.getElementById('vac-lote-prod-corral').value.trim();
+  const resp  = document.getElementById('vac-resp-corral').value.trim() || '—';
+  if(!corralId) { setMsg('vac-msg-corral','⚠ Seleccioná un corral','er'); return; }
+  if(!f)        { setMsg('vac-msg-corral','⚠ Ingresá la fecha de aplicación','er'); return; }
+
+  const objetivo = chapetasDeCorral(corralId).filter(ch => !vacExcluidas.has(ch));
+  if(!objetivo.length) { setMsg('vac-msg-corral','⚠ No hay cerdas para vacunar en este corral','er'); return; }
+
+  // Evita duplicar: si la cerda ya tiene esa vacuna registrada en esa misma fecha, se omite
+  const nuevas = objetivo.filter(ch => !DB.vacunas.some(v => v.chapeta===ch && v.tipo===tipo && v.fecha===f));
+  const omitidas = objetivo.length - nuevas.length;
+  if(!nuevas.length) { setMsg('vac-msg-corral',`ℹ Todas ya tenían ${tipo} registrada en esa fecha`,'er'); return; }
+
+  const ts = Date.now();
+  nuevas.forEach(ch => {
+    DB.vacunas.push({ chapeta:ch, tipo, fecha:f, dosis:dos||'—', lote:loteP||'—', resp, ts, porCorral:corralId });
+  });
+
+  saveDB();
+  vacExcluidas.clear();
+  ['vac-corral-id','vac-dos-corral','vac-lote-prod-corral','vac-resp-corral'].forEach(id => { document.getElementById(id).value=''; });
+  document.getElementById('vac-corral-preview').style.display = 'none';
+  toast(`Vacuna ${tipo} registrada para ${nuevas.length} cerda${nuevas.length===1?'':'s'} del corral ${corralId}`);
+  renderVacTabla(); recalcTodo();
+  setMsg('vac-msg-corral', `✓ Aplicada a ${nuevas.length} cerdas${omitidas?` (${omitidas} omitidas por estar duplicadas)`:''}`);
 }
 function getCorralOptions() {
   const n = DB.params.nCorrales || 5;
@@ -3641,6 +3752,10 @@ window.poblarSelectVacunas = poblarSelectVacunas;
 window.toggleModoVac = toggleModoVac;
 window.mostrarAretes = mostrarAretes;
 window.guardarVacLote = guardarVacLote;
+window.guardarVacCorral = guardarVacCorral;
+window.mostrarAretesCorral = mostrarAretesCorral;
+window.toggleExcluirVac = toggleExcluirVac;
+window.vacExcluidas = vacExcluidas;
 window.generarAretesAuto = generarAretesAuto;
 window.actualizarSugerenciaArete = actualizarSugerenciaArete;
 window.cambiarCorralChap = cambiarCorralChap;
