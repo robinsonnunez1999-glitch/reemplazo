@@ -490,6 +490,14 @@ tr:hover td{background:#fafbfc}
               </select>
               <div style="font-size:10px;color:var(--text3);margin-top:3px">Se asigna a los aretes generados; podés cambiar el corral de cada uno individualmente abajo.</div>
             </div>
+            <div class="field"><label>Tipo de cerda por defecto</label>
+              <select id="ing-tipo">
+                <option value="">Reemplazo (sin sufijo)</option>
+                <option value="TN70">TN70</option>
+                <option value="GC">GC — Gorda comercial</option>
+              </select>
+              <div style="font-size:10px;color:var(--text3);margin-top:3px">El sufijo se agrega al arete (ej. 0890 TN70) y la acompaña en todo el sistema. Podés cambiarlo arete por arete abajo.</div>
+            </div>
             <div class="field"><label>Chapetas / aretes (Enter para agregar una manual)</label>
               <div style="display:flex;gap:5px">
                 <input type="text" id="ing-ch" placeholder="Sugerido: —" onkeydown="if(event.key==='Enter'){event.preventDefault();addChap()}" style="flex:1">
@@ -2119,7 +2127,8 @@ function obtenerUltimoNumeroArete() {
   let digitos = 4; // ancho mínimo para el padding (ej: 3042)
   const revisar = (ch) => {
     if(!ch) return;
-    const soloDigitos = String(ch).replace(/\D/g,'');
+    const m = String(ch).match(/\d+/);
+    const soloDigitos = m ? m[0] : '';
     if(!soloDigitos) return;
     const n = parseInt(soloDigitos, 10);
     if(!isNaN(n) && n > max) max = n;
@@ -2146,13 +2155,20 @@ function actualizarSugerenciaArete() {
   if(inp) inp.placeholder = `Sugerido: ${sugerido}`;
 }
 
+// Arete completo tal como se guarda y se ve en todo el sistema: "0890 TN70", "0891 GC" o solo "0892"
+function fullArete(t) { return t.tipo ? `${t.ch} ${t.tipo}` : t.ch; }
+
 function addChap() {
   const inp = document.getElementById('ing-ch');
   const corralDefault = document.getElementById('ing-corral').value;
+  let tipo = document.getElementById('ing-tipo').value;
   let v = inp.value.trim().toUpperCase();
   if(!v) v = siguienteNumeroArete(); // si lo deja vacío, usa el sugerido
+  // Si escribió el sufijo a mano (ej. "0890 GC"), se separa para no duplicarlo
+  const mt = v.match(/^(.*?)\s*(TN70|GC)$/);
+  if(mt && mt[1]) { v = mt[1]; tipo = mt[2]; }
   if(chapsTmp.some(t => t.ch === v)) { inp.value=''; return; }
-  chapsTmp.push({ ch: v, corral: corralDefault });
+  chapsTmp.push({ ch: v, corral: corralDefault, tipo });
   renderChaps(); actualizarSugerenciaArete();
   inp.value=''; inp.focus();
 }
@@ -2164,6 +2180,7 @@ function addChap() {
 function generarAretesAuto() {
   const c = parseInt(document.getElementById('ing-c').value)||0;
   const corralDefault = document.getElementById('ing-corral').value;
+  const tipoDefault = document.getElementById('ing-tipo').value;
   if(!c) { setMsg('ing-msg','⚠ Indicá primero la cantidad de cerdas','er'); return; }
   if(!corralDefault) { setMsg('ing-msg','⚠ Seleccioná un corral por defecto antes de generar','er'); return; }
   const faltan = c - chapsTmp.length;
@@ -2171,7 +2188,7 @@ function generarAretesAuto() {
 
   for(let i=0; i<faltan; i++) {
     const { max, digitos } = obtenerUltimoNumeroArete();
-    chapsTmp.push({ ch: String(max+1).padStart(digitos,'0'), corral: corralDefault });
+    chapsTmp.push({ ch: String(max+1).padStart(digitos,'0'), corral: corralDefault, tipo: tipoDefault });
   }
   renderChaps(); actualizarSugerenciaArete();
   setMsg('ing-msg', `✓ Se generaron ${faltan} aretes automáticamente`, 'ok');
@@ -2181,11 +2198,20 @@ function cambiarCorralChap(i, val) {
   if(chapsTmp[i]) chapsTmp[i].corral = val;
 }
 
+function cambiarTipoChap(i, val) {
+  if(chapsTmp[i]) chapsTmp[i].tipo = val;
+}
+
 function renderChaps() {
   const opciones = getCorralOptions();
   document.getElementById('chap-area').innerHTML = chapsTmp.map((t,i) => `
     <div class="ctag">
       <i class="ti ti-tag" style="font-size:11px"></i>${t.ch}
+      <select class="ctag-sel" onchange="cambiarTipoChap(${i}, this.value)" title="Tipo de cerda">
+        <option value="" ${!t.tipo?'selected':''}>—</option>
+        <option value="TN70" ${t.tipo==='TN70'?'selected':''}>TN70</option>
+        <option value="GC" ${t.tipo==='GC'?'selected':''}>GC</option>
+      </select>
       <select class="ctag-sel" onchange="cambiarCorralChap(${i}, this.value)" title="Corral de esta cerda">
         <option value="">Sin corral</option>
         ${opciones.map(o => `<option value="${o}" ${o===t.corral?'selected':''}>${o}</option>`).join('')}
@@ -2201,6 +2227,7 @@ function guardarIngreso() {
   const c = parseInt(document.getElementById('ing-c').value)||0;
   const p = parseFloat(document.getElementById('ing-p').value)||0;
   const corralDefault = document.getElementById('ing-corral').value;
+  const tipoDefault = document.getElementById('ing-tipo').value;
   if(!o) { setMsg('ing-msg','⚠ Ingresá el código de lote','er'); return; }
   if(!f||!c||!p||!corralDefault) { setMsg('ing-msg','⚠ Completá todos los campos obligatorios (*)','er'); return; }
   if(c < chapsTmp.length) { setMsg('ing-msg',`⚠ Cargaste ${chapsTmp.length} chapetas pero indicaste ${c} animales`,'er'); return; }
@@ -2210,10 +2237,14 @@ function guardarIngreso() {
   // automáticamente con el siguiente número disponible y el corral por defecto.
   while(chapsTmp.length < c) {
     const { max, digitos } = obtenerUltimoNumeroArete();
-    chapsTmp.push({ ch: String(max+1).padStart(digitos,'0'), corral: corralDefault });
+    chapsTmp.push({ ch: String(max+1).padStart(digitos,'0'), corral: corralDefault, tipo: tipoDefault });
   }
 
-  const chapetas = chapsTmp.map(t => t.ch);
+  // Evita pisar un arete que ya existe en el sistema
+  const repetida = chapsTmp.find(t => DB.corrales[fullArete(t)]);
+  if(repetida) { setMsg('ing-msg',`⚠ El arete ${fullArete(repetida)} ya existe en el sistema`,'er'); return; }
+
+  const chapetas = chapsTmp.map(fullArete);
   const corralesUsados = [...new Set(chapsTmp.map(t => t.corral))];
   const corralEtiqueta = corralesUsados.length === 1 ? corralesUsados[0] : `Varios (${corralesUsados.join(', ')})`;
 
@@ -2228,7 +2259,7 @@ function guardarIngreso() {
     loteExistente.chapetas = [...(loteExistente.chapetas||[]), ...chapetas];
     const corralesLote = [...new Set([...( (loteExistente.corral||'').replace('Varios (','').replace(')','').split(', ').filter(Boolean) ), ...corralesUsados])];
     loteExistente.corral = corralesLote.length === 1 ? corralesLote[0] : `Varios (${corralesLote.join(', ')})`;
-    chapsTmp.forEach(t => { DB.corrales[t.ch] = { corral: t.corral, enEnf:false, loteId: loteExistente.id }; });
+    chapsTmp.forEach(t => { DB.corrales[fullArete(t)] = { corral: t.corral, enEnf:false, loteId: loteExistente.id, tipo: t.tipo||'' }; });
     saveDB(); chapsTmp = []; renderChaps(); limpiarIngreso(true);
     toast(`Lote "${loteExistente.nombre||o}" actualizado — se sumaron ${c} animal${c===1?'':'es'} (total ${loteExistente.cantidad})`);
   } else {
@@ -2244,7 +2275,7 @@ function guardarIngreso() {
       chapetas
     };
     DB.lotes.push(lote);
-    chapsTmp.forEach(t => { DB.corrales[t.ch] = { corral: t.corral, enEnf:false, loteId: lote.id }; });
+    chapsTmp.forEach(t => { DB.corrales[fullArete(t)] = { corral: t.corral, enEnf:false, loteId: lote.id, tipo: t.tipo||'' }; });
     saveDB(); chapsTmp = []; renderChaps(); limpiarIngreso(true);
     toast(`Lote "${lote.nombre}" registrado — ${c} animal${c===1?'':'es'}`);
   }
@@ -2252,7 +2283,7 @@ function guardarIngreso() {
 }
 
 function limpiarIngreso(keep) {
-  ['ing-nombre','ing-f','ing-o','ing-c','ing-p','ing-corral','ing-ch'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['ing-nombre','ing-f','ing-o','ing-c','ing-p','ing-corral','ing-ch','ing-tipo'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   document.getElementById('ing-corral').value='';
   document.getElementById('ing-calc').style.display='none';
   if(!keep) { chapsTmp=[]; renderChaps(); document.getElementById('ing-msg').textContent=''; }
@@ -3759,6 +3790,7 @@ window.vacExcluidas = vacExcluidas;
 window.generarAretesAuto = generarAretesAuto;
 window.actualizarSugerenciaArete = actualizarSugerenciaArete;
 window.cambiarCorralChap = cambiarCorralChap;
+window.cambiarTipoChap = cambiarTipoChap;
 
 // ─── INIT ─────────────────────────────────────────────────────
 (async function init() {
